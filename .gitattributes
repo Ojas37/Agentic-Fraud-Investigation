@@ -1,0 +1,24 @@
+# Normalize line endings
+* text=auto
+
+# Force Unix LF for Python and text files
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.env text eol=lf
+*.example text eol=lf
+*.gsql text eol=lf
+*.sh text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.gz binary
+*.tar binary
