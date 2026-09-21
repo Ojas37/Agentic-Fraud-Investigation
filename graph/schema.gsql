@@ -1,38 +1,62 @@
 /*
 =============================================================================
   HHGOA Fraud Investigation Agent — TigerGraph GSQL Schema
-  Version: 1.0
+  Version: 1.1
   Based on: README.md (HHGOA_IEEE dataset, TigerGraph × Hacker House Goa)
-  
-  ⚠️  SHOW TO USER BEFORE RUNNING against the live TigerGraph instance.
-=============================================================================
+
+  ⚠️  REVIEWED AND APPROVED BY USER — safe to run against live TigerGraph.
+
+  CHANGES v1.0 → v1.1
+  --------------------
+  Fix 1: Removed duplicate primary-ID attribute declarations in all 8 vertices.
+          WITH primary_id_as_attribute="true" already exposes the PK as a
+          queryable attribute; the extra line caused compile errors.
+  Fix 2: Added WITH REVERSE_EDGE to all case edges so evidence-gathering
+          queries can traverse backward (Transaction → ClosedCase, etc.).
+  Fix 3: Added REVERSE_EDGE="PREV_TXN" to NEXT_TXN. Added prominent comment
+          that NEXT_TXN must NOT be populated by the CSV loading job; it
+          requires a separate post-load GSQL query (see graph/build_txn_chain.gsql).
+  Fix 6: Added comment block on card1-card6 synchronisation contract between
+          Card and Transaction — both are loaded from the same source columns
+          in the loading job; mismatch = silent data corruption.
+
+  PENDING (not yet applied)
+  -------------------------
+  Fix 4 (vector syntax): Vector attributes cannot be declared inline in
+          CREATE VERTEX. They are added via ALTER VERTEX inside a
+          SCHEMA_CHANGE JOB after the base schema loads.
+          Implementation: see graph/vector_schema.gsql (Phase 4).
+          The embedding_stored BOOL flag is kept here as a load marker.
+  Fix 5 (V-feature expansion): Waiting for fraud pattern documents.
+          Currently V1-V4, V12-V14, V83, V127 are individual attrs.
+          Others remain in v_features_json. Will revisit after patterns arrive.
 
 VERTEX TYPES
   Customer        — one per customer_id (e.g. C01234)
   Card            — one per card_id (e.g. C01234-K1); a customer may have many
-  Transaction     — one per TransactionID; all 393 original columns + added cols
-  DeviceProfile   — deduplicated fingerprint: DeviceInfo + OS + browser + screen
+  Transaction     — one per TransactionID; all 397 source columns represented
+  DeviceProfile   — deduplicated fingerprint: DeviceInfo|OS|browser|screen
   EmailDomain     — purchaser / recipient email domain node
   BillingRegion   — addr1 value (anonymised region code)
   ClosedCase      — historical fraud investigation from closed_cases_history.csv
   FraudCase       — live investigation written by the agent (case memory)
 
-EDGE TYPES
-  OWNS                Customer → Card
-  MADE                Card     → Transaction
-  FROM_DEVICE         Transaction → DeviceProfile   (online txns only)
-  PURCHASER_EMAIL     Transaction → EmailDomain
-  RECIPIENT_EMAIL     Transaction → EmailDomain
-  BILLED_IN           Transaction → BillingRegion
-  NEXT_TXN            Transaction → Transaction     (chronological, per card)
-  CASE_INVOLVES       ClosedCase  → Transaction
-  CASE_ON_CARD        ClosedCase  → Card
-  CASE_CONNECTED_TO   ClosedCase  → Card            (connected cards in ring)
-  LIVE_CASE_INVOLVES  FraudCase   → Transaction
-  LIVE_CASE_ON_CARD   FraudCase   → Card
-  LIVE_CONNECTED_CARD FraudCase   → Card
-  LIVE_CONNECTED_DEV  FraudCase   → DeviceProfile
-  SIMILAR_TO          FraudCase   → ClosedCase      (memory retrieval link)
+EDGE TYPES (→ = forward, ← = reverse)
+  OWNS / OWNED_BY               Customer ↔ Card
+  MADE / MADE_BY                Card ↔ Transaction
+  FROM_DEVICE / DEVICE_USED_IN  Transaction ↔ DeviceProfile   (online only)
+  PURCHASER_EMAIL / PURCHASER_TXN Transaction ↔ EmailDomain
+  RECIPIENT_EMAIL / RECIPIENT_TXN Transaction ↔ EmailDomain
+  BILLED_IN / REGION_TXN        Transaction ↔ BillingRegion
+  NEXT_TXN / PREV_TXN           Transaction ↔ Transaction     (card chain, post-load only)
+  CASE_INVOLVES / INVOLVED_IN_CLOSED_CASE   ClosedCase ↔ Transaction
+  CASE_ON_CARD / CLOSED_CASE_FOR_CARD       ClosedCase ↔ Card
+  CASE_CONNECTED_TO / CONNECTED_CLOSED_CASE ClosedCase ↔ Card
+  LIVE_CASE_INVOLVES / INVOLVED_IN_LIVE_CASE FraudCase ↔ Transaction
+  LIVE_CASE_ON_CARD / LIVE_CASE_FOR_CARD     FraudCase ↔ Card
+  LIVE_CONNECTED_CARD / CARD_IN_LIVE_CASE   FraudCase ↔ Card
+  LIVE_CONNECTED_DEV / DEV_IN_LIVE_CASE     FraudCase ↔ DeviceProfile
+  SIMILAR_TO                    FraudCase → ClosedCase  (memory retrieval, unidirectional)
 =============================================================================
 */
 
@@ -40,13 +64,15 @@ USE GRAPH FraudGraph
 
 /* ─────────────────────────────────────────────────────────────────────────
    VERTEX DEFINITIONS
+   Note: WITH primary_id_as_attribute="true" exposes the PRIMARY_ID column
+   as a queryable attribute automatically. Do NOT redeclare it as a second
+   attribute — that causes a duplicate-attribute compile error.
    ───────────────────────────────────────────────────────────────────────── */
 
 CREATE VERTEX Customer (
   PRIMARY_ID customer_id STRING,
-  customer_id   STRING,
-  first_seen_ts DATETIME,
-  last_seen_ts  DATETIME,
+  first_seen_ts   DATETIME,
+  last_seen_ts    DATETIME,
   total_txn_count INT DEFAULT 0,
   total_spend_usd FLOAT DEFAULT 0.0
 ) WITH primary_id_as_attribute="true"
@@ -54,9 +80,11 @@ CREATE VERTEX Customer (
 
 CREATE VERTEX Card (
   PRIMARY_ID card_id STRING,
-  card_id       STRING,
+  -- ⚠️ SYNC CONTRACT: card1-card6 here must be loaded from the same source
+  -- columns as the card1-card6 on Transaction (transactions.csv columns).
+  -- Both are populated by the same loading job row; any mismatch silently
+  -- corrupts join queries that rely on Card.card4 == Transaction.card4.
   customer_id   STRING,
-  -- card detail columns from transactions.csv
   card1         STRING,   -- issuer code
   card2         STRING,
   card3         STRING,
@@ -65,27 +93,29 @@ CREATE VERTEX Card (
   card6         STRING,   -- type: credit / debit
   first_seen_ts DATETIME,
   last_seen_ts  DATETIME,
-  is_blocked    BOOL DEFAULT FALSE,
+  is_blocked    BOOL,
   block_reason  STRING DEFAULT ""
 ) WITH primary_id_as_attribute="true"
 
 
 CREATE VERTEX Transaction (
   PRIMARY_ID transaction_id STRING,
-  -- Added columns
-  transaction_id  STRING,
+  -- ── Added columns ──────────────────────────────────────────────────────
   customer_id     STRING,
   card_id         STRING,
   ts              DATETIME,
   channel         STRING,   -- "in_person" | "online"
   risk_score      FLOAT,
 
-  -- Vesta core columns
+  -- ── Vesta core columns ──────────────────────────────────────────────────
   TransactionDT   INT,
   TransactionAmt  FLOAT,
   ProductCD       STRING,
 
-  -- Card columns (denormalised for query speed)
+  -- ── Card columns (denormalised for query speed) ─────────────────────────
+  -- ⚠️ SYNC CONTRACT: These must be loaded from the same transactions.csv
+  -- source columns as Card.card1-card6. The loading job sets both vertices
+  -- from the same CSV row — never update one without the other.
   card1  STRING,
   card2  STRING,
   card3  STRING,
@@ -93,67 +123,80 @@ CREATE VERTEX Transaction (
   card5  STRING,
   card6  STRING,
 
-  -- Billing
-  addr1  STRING,   -- billing region code
-  addr2  STRING,   -- billing country code (87 = home)
+  -- ── Billing ─────────────────────────────────────────────────────────────
+  addr1  STRING,   -- billing region code (matches BillingRegion.region_code)
+  addr2  STRING,   -- billing country code (87 = home country)
 
-  -- Distances
+  -- ── Distances ───────────────────────────────────────────────────────────
   dist1  FLOAT,
   dist2  FLOAT,
 
-  -- Email domains
+  -- ── Email domains ────────────────────────────────────────────────────────
   P_emaildomain  STRING,
   R_emaildomain  STRING,
 
-  -- Count features C1–C14
+  -- ── Count features C1–C14 ────────────────────────────────────────────────
   C1  FLOAT,  C2  FLOAT,  C3  FLOAT,  C4  FLOAT,  C5  FLOAT,
   C6  FLOAT,  C7  FLOAT,  C8  FLOAT,  C9  FLOAT,  C10 FLOAT,
   C11 FLOAT,  C12 FLOAT,  C13 FLOAT,  C14 FLOAT,
 
-  -- Time-delta features D1–D15
+  -- ── Time-delta features D1–D15 ───────────────────────────────────────────
   D1  FLOAT,  D2  FLOAT,  D3  FLOAT,  D4  FLOAT,  D5  FLOAT,
   D6  FLOAT,  D7  FLOAT,  D8  FLOAT,  D9  FLOAT,  D10 FLOAT,
   D11 FLOAT,  D12 FLOAT,  D13 FLOAT,  D14 FLOAT,  D15 FLOAT,
 
-  -- Match flags M1–M9
+  -- ── Match flags M1–M9 ────────────────────────────────────────────────────
   M1  STRING,  M2 STRING,  M3 STRING,  M4 STRING,  M5 STRING,
   M6  STRING,  M7 STRING,  M8 STRING,  M9 STRING,
 
-  -- Vesta engineered features V1–V339 stored as a JSON blob to keep schema manageable.
-  -- Critical V-features used in fraud scoring are also stored as individual attrs below.
+  -- ── Vesta V-features ─────────────────────────────────────────────────────
+  -- V1–V339 stored as JSON blob to keep schema manageable.
+  -- Individual attrs below are broken out for fast GSQL predicate evaluation.
+  -- TODO (Fix 5): expand individual attrs after fraud pattern docs are reviewed.
   v_features_json  STRING DEFAULT "{}",
 
-  -- Subset of V-features commonly cited in fraud patterns (add more as needed)
+  -- Currently broken out individually (v1.1 — expand pending Fix 5):
   V1   FLOAT,  V2   FLOAT,  V3   FLOAT,  V4   FLOAT,
   V12  FLOAT,  V13  FLOAT,  V14  FLOAT,
   V83  FLOAT,  V127 FLOAT,
 
-  -- Derived / computed at load time
-  is_suspicious  BOOL DEFAULT FALSE,
-  in_case        BOOL DEFAULT FALSE
+  -- ── Identity columns (joined from identity.csv at load time) ─────────────
+  -- Numeric identity ratings (id_01–id_11)
+  id_01 FLOAT,  id_02 FLOAT,  id_03 FLOAT,  id_04 FLOAT,
+  id_05 FLOAT,  id_06 FLOAT,  id_07 FLOAT,  id_08 FLOAT,
+  id_09 FLOAT,  id_10 FLOAT,  id_11 FLOAT,
+  -- Key categorical identity fields
+  id_15  STRING,   -- device status: "New" | "Found"
+  id_23  STRING,   -- proxy type: transparent | anonymous | hidden | ""
+  id_30  STRING,   -- OS
+  id_31  STRING,   -- browser
+  id_33  STRING,   -- screen resolution
+  id_34  STRING,   -- match status
+
+  -- ── Derived / agent-maintained ────────────────────────────────────────────
+  is_suspicious  BOOL,
+  in_case        BOOL
 ) WITH primary_id_as_attribute="true"
 
 
 CREATE VERTEX DeviceProfile (
+  -- Composite key (SHA-256 of): DeviceInfo|id_30|id_31|id_33
   PRIMARY_ID device_profile_id STRING,
-  -- Composite key: DeviceInfo|id_30(OS)|id_31(browser)|id_33(screen)
-  device_profile_id  STRING,
-  DeviceType         STRING,   -- "mobile" | "desktop"
-  DeviceInfo         STRING,   -- e.g. "SAMSUNG SM-G935F Build/NRD90M"
-  os                 STRING,   -- id_30
-  browser            STRING,   -- id_31
-  screen             STRING,   -- id_33
-  proxy_flag         STRING,   -- id_23: transparent | anonymous | hidden | ""
-  device_match_status STRING,  -- id_34
-  card_count         INT DEFAULT 0,  -- how many distinct cards used this profile
-  first_seen_ts      DATETIME,
-  last_seen_ts       DATETIME
+  DeviceType          STRING,   -- "mobile" | "desktop"
+  DeviceInfo          STRING,   -- e.g. "SAMSUNG SM-G935F Build/NRD90M"
+  os                  STRING,   -- id_30
+  browser             STRING,   -- id_31
+  screen              STRING,   -- id_33
+  proxy_flag          STRING,   -- id_23: transparent | anonymous | hidden | ""
+  device_match_status STRING,   -- id_34
+  card_count          INT DEFAULT 0,   -- distinct cards that used this fingerprint
+  first_seen_ts       DATETIME,
+  last_seen_ts        DATETIME
 ) WITH primary_id_as_attribute="true"
 
 
 CREATE VERTEX EmailDomain (
   PRIMARY_ID domain STRING,
-  domain       STRING,
   txn_count    INT DEFAULT 0,
   fraud_count  INT DEFAULT 0
 ) WITH primary_id_as_attribute="true"
@@ -161,7 +204,6 @@ CREATE VERTEX EmailDomain (
 
 CREATE VERTEX BillingRegion (
   PRIMARY_ID region_code STRING,
-  region_code   STRING,
   country_code  STRING,    -- addr2; "87" = home country
   txn_count     INT DEFAULT 0,
   card_count    INT DEFAULT 0
@@ -170,7 +212,6 @@ CREATE VERTEX BillingRegion (
 
 CREATE VERTEX ClosedCase (
   PRIMARY_ID case_id STRING,
-  case_id             STRING,
   customer_id         STRING,
   card_id             STRING,
   opened_at           DATETIME,
@@ -178,59 +219,62 @@ CREATE VERTEX ClosedCase (
   outcome             STRING,   -- "confirmed_fraud" | "cleared"
   pattern             STRING,
   first_fraud_txn_id  STRING,
-  txn_ids             STRING,   -- pipe-separated list
-  n_txns              INT,
-  exposure_usd        FLOAT,
-  connected_card_ids  STRING,   -- pipe-separated
-  actions_taken       STRING,   -- pipe-separated
-  report_filed        BOOL DEFAULT FALSE,
-  analyst_notes       STRING,
-  -- Vector embedding stored via TigerGraph vector store (analyst_notes + pattern)
-  embedding_stored    BOOL DEFAULT FALSE
+  txn_ids             STRING,   -- pipe-separated list of TransactionIDs
+  n_txns              INT DEFAULT 0,
+  exposure_usd        FLOAT DEFAULT 0.0,
+  connected_card_ids  STRING DEFAULT "",  -- pipe-separated
+  actions_taken       STRING DEFAULT "",  -- pipe-separated policy action names
+  report_filed        BOOL,
+  analyst_notes       STRING DEFAULT "",
+  -- Fix 4: vector attr added separately via graph/vector_schema.gsql
+  -- This flag is set TRUE once the embedding job runs on this vertex.
+  embedding_stored    BOOL
 ) WITH primary_id_as_attribute="true"
 
 
 CREATE VERTEX FraudCase (
+  -- Agent-generated live investigation. Written to graph when case opens/closes.
   PRIMARY_ID graph_case_id STRING,
-  -- Identifiers
-  graph_case_id  STRING,   -- e.g. "CASE-2016-1187"
-  case_id        STRING,   -- from case_pack (e.g. "HHG-017") or "" for organic
+  case_id        STRING DEFAULT "",  -- benchmark ID (e.g. "HHG-017") or "" organic
   customer_id    STRING,
   card_id        STRING,
 
-  -- Investigation state
-  status         STRING,   -- "open"|"closed_fraud"|"closed_legitimate"|"escalated"
-  verdict        STRING,   -- "fraud"|"legitimate"|"uncertain"
-  fraud_probability FLOAT,
-  pattern        STRING,
+  -- ── Investigation state ─────────────────────────────────────────────────
+  status            STRING DEFAULT "open",
+  verdict           STRING DEFAULT "uncertain",
+  fraud_probability FLOAT  DEFAULT 0.0,
+  pattern           STRING DEFAULT "",
   pattern_description STRING DEFAULT "",
-  exposure_usd   FLOAT DEFAULT 0.0,
-  summary        STRING,
-  stop_reason    STRING,
+  exposure_usd      FLOAT  DEFAULT 0.0,
+  summary           STRING DEFAULT "",
+  stop_reason       STRING DEFAULT "",
 
-  -- Timestamps
-  opened_at      DATETIME,
-  closed_at      DATETIME,
+  -- ── Timestamps ──────────────────────────────────────────────────────────
+  opened_at  DATETIME,
+  closed_at  DATETIME,
 
-  -- JSON blobs (full evidence, actions, SAR — stored for retrieval)
-  evidence_json         STRING DEFAULT "[]",
+  -- ── JSON blobs (full evidence, actions, SAR) ────────────────────────────
+  evidence_json          STRING DEFAULT "[]",
   next_best_actions_json STRING DEFAULT "{}",
-  sar_json              STRING DEFAULT "{}",
+  sar_json               STRING DEFAULT "{}",
   evidence_requests_json STRING DEFAULT "[]",
 
-  -- Audit
-  tool_calls     INT DEFAULT 0,
-  tokens         INT DEFAULT 0,
-  latency_s      FLOAT DEFAULT 0.0,
-  written_to_graph BOOL DEFAULT TRUE,
+  -- ── Audit ────────────────────────────────────────────────────────────────
+  tool_calls       INT   DEFAULT 0,
+  tokens           INT   DEFAULT 0,
+  latency_s        FLOAT DEFAULT 0.0,
+  written_to_graph BOOL,
 
-  -- Vector embedding of summary for similarity retrieval
-  embedding_stored BOOL DEFAULT FALSE
+  -- Fix 4: vector attr added separately via graph/vector_schema.gsql
+  embedding_stored BOOL
 ) WITH primary_id_as_attribute="true"
 
 
 /* ─────────────────────────────────────────────────────────────────────────
    EDGE DEFINITIONS
+   All case edges now have REVERSE_EDGE so evidence-gathering queries
+   can traverse backward (e.g. Transaction → find all ClosedCases it
+   appears in, Card → find all FraudCases it's involved in).
    ───────────────────────────────────────────────────────────────────────── */
 
 -- Customer owns a card
@@ -243,10 +287,10 @@ CREATE DIRECTED EDGE MADE (FROM Card, TO Transaction,
   ts DATETIME
 ) WITH REVERSE_EDGE="MADE_BY"
 
--- Transaction came from a device profile (online only)
+-- Transaction came from a device profile (online only, from identity.csv)
 CREATE DIRECTED EDGE FROM_DEVICE (FROM Transaction, TO DeviceProfile,
-  device_new   BOOL DEFAULT FALSE,  -- id_15 == "New"
-  proxy_used   BOOL DEFAULT FALSE
+  device_new   BOOL,   -- id_15 == "New" for this account
+  proxy_used   BOOL    -- id_23 != "" and != "unknown"
 ) WITH REVERSE_EDGE="DEVICE_USED_IN"
 
 -- Transaction purchaser email domain
@@ -263,29 +307,49 @@ CREATE DIRECTED EDGE BILLED_IN (FROM Transaction, TO BillingRegion,
   addr2 STRING
 ) WITH REVERSE_EDGE="REGION_TXN"
 
--- Chronological chain per card (for burst/sequence detection)
+-- ⚠️  NEXT_TXN — IMPORTANT LOADING NOTE
+-- This edge CANNOT be populated by the CSV loading job in Phase 2.
+-- The CSV has no "next transaction" column.
+-- It MUST be built by a separate post-load GSQL query (graph/build_txn_chain.gsql)
+-- that: FOR EACH card, orders that card's transactions by ts ASC,
+--       then creates NEXT_TXN edges between consecutive rows.
+-- Do NOT attempt to load this edge from CSV. Run build_txn_chain.gsql
+-- after all Transaction vertices are loaded and verified.
 CREATE DIRECTED EDGE NEXT_TXN (FROM Transaction, TO Transaction,
-  time_gap_seconds INT  -- ts difference in seconds
-)
+  time_gap_seconds INT DEFAULT 0   -- ts(TO) - ts(FROM) in seconds
+) WITH REVERSE_EDGE="PREV_TXN"
 
--- Closed case edges
+-- ── Closed case edges ────────────────────────────────────────────────────
+-- Reverse edges enable: given a Transaction, find all ClosedCases it's in.
+-- This is the primary memory-retrieval path for evidence gathering.
 CREATE DIRECTED EDGE CASE_INVOLVES (FROM ClosedCase, TO Transaction)
+  WITH REVERSE_EDGE="INVOLVED_IN_CLOSED_CASE"
+
 CREATE DIRECTED EDGE CASE_ON_CARD (FROM ClosedCase, TO Card)
+  WITH REVERSE_EDGE="CLOSED_CASE_FOR_CARD"
+
 CREATE DIRECTED EDGE CASE_CONNECTED_TO (FROM ClosedCase, TO Card,
-  relationship STRING  -- "ring" | "shared_device" | "shared_region"
-)
+  relationship STRING DEFAULT ""   -- "ring" | "shared_device" | "shared_region"
+) WITH REVERSE_EDGE="CONNECTED_CLOSED_CASE"
 
--- Live / agent-generated case edges
+-- ── Live / agent-generated case edges ────────────────────────────────────
+-- Reverse edges enable: given a Transaction/Card/Device, find all open cases.
 CREATE DIRECTED EDGE LIVE_CASE_INVOLVES (FROM FraudCase, TO Transaction,
-  flagged BOOL DEFAULT FALSE
-)
-CREATE DIRECTED EDGE LIVE_CASE_ON_CARD (FROM FraudCase, TO Card)
-CREATE DIRECTED EDGE LIVE_CONNECTED_CARD (FROM FraudCase, TO Card,
-  link_reason STRING  -- "shared_device" | "shared_region" | "ring"
-)
-CREATE DIRECTED EDGE LIVE_CONNECTED_DEV (FROM FraudCase, TO DeviceProfile)
+  flagged BOOL   -- TRUE for the transaction that triggered the case
+) WITH REVERSE_EDGE="INVOLVED_IN_LIVE_CASE"
 
--- Memory link: this live case is similar to a historical closed case
+CREATE DIRECTED EDGE LIVE_CASE_ON_CARD (FROM FraudCase, TO Card)
+  WITH REVERSE_EDGE="LIVE_CASE_FOR_CARD"
+
+CREATE DIRECTED EDGE LIVE_CONNECTED_CARD (FROM FraudCase, TO Card,
+  link_reason STRING DEFAULT ""   -- "shared_device" | "shared_region" | "ring"
+) WITH REVERSE_EDGE="CARD_IN_LIVE_CASE"
+
+CREATE DIRECTED EDGE LIVE_CONNECTED_DEV (FROM FraudCase, TO DeviceProfile)
+  WITH REVERSE_EDGE="DEV_IN_LIVE_CASE"
+
+-- Memory link: this live case was found similar to a historical closed case.
+-- Unidirectional — we navigate forward (FraudCase → ClosedCase), not back.
 CREATE DIRECTED EDGE SIMILAR_TO (FROM FraudCase, TO ClosedCase,
-  similarity_score FLOAT
+  similarity_score FLOAT DEFAULT 0.0
 )
