@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     tg_token: str = Field("", env="TG_TOKEN")
 
     # ── LLM ─────────────────────────────────────────────────────────────────
-    llm_provider: str = Field("anthropic", env="LLM_PROVIDER")
+    llm_provider: str = Field("groq", env="LLM_PROVIDER")
     llm_api_key: str = Field(..., env="LLM_API_KEY")
-    llm_model: str = Field("claude-sonnet-4-5", env="LLM_MODEL")
+    llm_model: str = Field("llama-3.3-70b-versatile", env="LLM_MODEL")
 
     # ── Embeddings ───────────────────────────────────────────────────────────
     embedding_model: str = Field("text-embedding-3-small", env="EMBEDDING_MODEL")
