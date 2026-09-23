@@ -10,8 +10,7 @@ USE GRAPH FraudGraph
 
 DROP QUERY find_similar_cases_graph
 
-CREATE OR REPLACE QUERY find_similar_cases_graph(STRING card_id, STRING pattern_filter = "") 
-  RETURNS (STRING pattern_name, FLOAT confidence_score, STRING risk_indicator, STRING details) {
+CREATE OR REPLACE QUERY find_similar_cases_graph(VERTEX<Card> target_card, STRING pattern_filter = "") {
   
   TYPEDEF TUPLE<STRING case_id, STRING outcome, STRING pattern, FLOAT exposure, STRING analyst_notes> CASE_MATCH;
   
@@ -20,12 +19,10 @@ CREATE OR REPLACE QUERY find_similar_cases_graph(STRING card_id, STRING pattern_
   SumAccum<INT> @@confirmed_count = 0;
   SumAccum<INT> @@cleared_count = 0;
   
-  StartCard = {Card.*};
-  StartCard = SELECT c FROM StartCard:c
-              WHERE c.card_id == card_id;
+  StartCard = {target_card};
 
   # Match 1: Direct cases for this card
-  DirectCases = SELECT cc FROM StartCard:c -(<CLOSED_CASE_FOR_CARD:e)- ClosedCase:cc
+  DirectCases = SELECT cc FROM StartCard:c -(CLOSED_CASE_FOR_CARD:e)-> ClosedCase:cc
                 ACCUM
                   @@matched_cases += CASE_MATCH(cc.case_id, cc.outcome, cc.pattern, cc.exposure_usd, cc.analyst_notes),
                   @@evidence_ids += cc.case_id,
@@ -33,21 +30,27 @@ CREATE OR REPLACE QUERY find_similar_cases_graph(STRING card_id, STRING pattern_
                   ELSE @@cleared_count += 1 END;
 
   # Match 2: Cases connected via ring/shared links
-  ConnectedCases = SELECT cc FROM StartCard:c -(<CONNECTED_CLOSED_CASE:e)- ClosedCase:cc
+  ConnectedCases = SELECT cc FROM StartCard:c -(CONNECTED_CLOSED_CASE:e)-> ClosedCase:cc
                    ACCUM
                      @@matched_cases += CASE_MATCH(cc.case_id, cc.outcome, cc.pattern, cc.exposure_usd, cc.analyst_notes),
                      @@evidence_ids += cc.case_id,
                      IF cc.outcome == "confirmed_fraud" THEN @@confirmed_count += 1
                      ELSE @@cleared_count += 1 END;
 
-  # Normalized confidence score based on precedent
   INT total_matches = @@matched_cases.size();
   FLOAT conf = 0.0;
   IF total_matches > 0 THEN
     conf = (@@confirmed_count * 1.0) / total_matches;
   END;
 
-  STRING risk = IF conf >= 0.70 THEN "high" ELSE IF conf >= 0.40 THEN "medium" ELSE "low" END;
+  STRING risk = "low";
+  IF conf >= 0.70 THEN
+    risk = "high";
+  ELSE IF conf >= 0.40 THEN
+    risk = "medium";
+  ELSE
+    risk = "low";
+  END;
 
   STRING details_json = "{\"rule_ref\":\"R8\",\"total_matched_cases\":" + to_string(total_matches)
                         + ",\"confirmed_fraud_count\":" + to_string(@@confirmed_count)

@@ -1,8 +1,6 @@
 /*
 =============================================================================
   Query: detect_card_testing (Pattern 1 / Policy Rule R5)
-  Traverses PREV_TXN chain edges to detect 3+ micro-authorizations (<$5.00)
-  preceding a target purchase within 24 hours.
 =============================================================================
 */
 
@@ -10,8 +8,7 @@ USE GRAPH FraudGraph
 
 DROP QUERY detect_card_testing
 
-CREATE OR REPLACE QUERY detect_card_testing(STRING target_txn_id, INT max_micro_txns = 10) 
-  RETURNS (STRING pattern_name, FLOAT confidence_score, STRING risk_indicator, STRING details) {
+CREATE OR REPLACE QUERY detect_card_testing(VERTEX<Transaction> target_txn, INT max_micro_txns = 10) {
   
   TYPEDEF TUPLE<STRING txn_id, FLOAT amt, DATETIME ts, INT time_gap> TXN_STEP;
   
@@ -22,20 +19,20 @@ CREATE OR REPLACE QUERY detect_card_testing(STRING target_txn_id, INT max_micro_
   SumAccum<STRING> @@channel = "";
   SumAccum<INT> @@micro_count = 0;
   
-  Target = {Transaction.*};
-  Target = SELECT t FROM Target:t
-           WHERE t.transaction_id == target_txn_id
-           ACCUM 
-             @@target_amt += t.TransactionAmt,
-             @@model_risk += t.risk_score,
-             @@channel += t.channel,
-             @@evidence_ids += t.transaction_id;
+  StartTxn = {target_txn};
+  
+  TargetTxn = SELECT t FROM StartTxn:t
+              ACCUM 
+                @@target_amt += t.TransactionAmt,
+                @@model_risk += t.risk_score,
+                @@channel += t.channel,
+                @@evidence_ids += t.transaction_id;
 
   # Walk backward along PREV_TXN chain up to max_micro_txns steps
-  Curr = Target;
+  Curr = TargetTxn;
   WHILE Curr.size() > 0 AND @@chain_steps.size() < max_micro_txns DO
     Curr = SELECT prev_t FROM Curr:curr -(PREV_TXN:e)-> Transaction:prev_t
-           WHERE e.time_gap_seconds <= 86400  # Within 24h window (Policy R5)
+           WHERE e.time_gap_seconds <= 86400
            ACCUM
              @@chain_steps += TXN_STEP(prev_t.transaction_id, prev_t.TransactionAmt, prev_t.ts, e.time_gap_seconds),
              @@evidence_ids += prev_t.transaction_id,
@@ -44,22 +41,29 @@ CREATE OR REPLACE QUERY detect_card_testing(STRING target_txn_id, INT max_micro_
              END;
   END;
 
-  # Scoring: 3+ micro txns (<$5.00) followed by target purchase (Policy R5)
-  # Normalized Confidence = min(1.0, (micro_count / 3.0) * 0.6 + (target_amt > 20.0 ? 0.2 : 0.0) + (model_risk * 0.2))
   FLOAT conf = 0.0;
   STRING risk = "low";
   
   IF @@micro_count >= 3 THEN
-    conf = 0.6 + (IF @@target_amt >= 20.0 THEN 0.2 ELSE 0.0 END) + (@@model_risk * 0.2);
-    IF conf > 1.0 THEN conf = 1.0; END;
-    risk = IF conf >= 0.75 THEN "high" ELSE "medium" END;
+    conf = 0.60;
+    IF @@target_amt >= 20.0 THEN
+      conf = conf + 0.20;
+    END;
+    conf = conf + (@@model_risk * 0.20);
+    IF conf >= 0.75 THEN
+      risk = "high";
+    ELSE
+      risk = "medium";
+    END;
   ELSE IF @@micro_count == 2 THEN
-    conf = 0.35 + (@@model_risk * 0.2);
+    conf = 0.35 + (@@model_risk * 0.20);
     risk = "medium";
   ELSE
-    conf = @@model_risk * 0.2;
+    conf = @@model_risk * 0.20;
     risk = "low";
   END;
+
+  IF conf > 1.0 THEN conf = 1.0; END;
 
   STRING details_json = "{\"rule_ref\":\"R5\",\"micro_txn_count\":" + to_string(@@micro_count) 
                         + ",\"target_amount\":" + to_string(@@target_amt)

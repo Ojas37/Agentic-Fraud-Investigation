@@ -10,8 +10,7 @@ USE GRAPH FraudGraph
 
 DROP QUERY detect_fraud_ring
 
-CREATE OR REPLACE QUERY detect_fraud_ring(STRING card_id, INT max_hops = 2) 
-  RETURNS (STRING pattern_name, FLOAT confidence_score, STRING risk_indicator, STRING details) {
+CREATE OR REPLACE QUERY detect_fraud_ring(VERTEX<Card> target_card, INT max_hops = 2) {
   
   SetAccum<STRING> @@ring_cards;
   SetAccum<STRING> @@ring_customers;
@@ -20,9 +19,8 @@ CREATE OR REPLACE QUERY detect_fraud_ring(STRING card_id, INT max_hops = 2)
   SetAccum<STRING> @@evidence_ids;
   SumAccum<FLOAT> @@total_ring_exposure = 0.0;
   
-  StartCard = {Card.*};
+  StartCard = {target_card};
   StartCard = SELECT c FROM StartCard:c
-              WHERE c.card_id == card_id
               ACCUM 
                 @@ring_cards += c.card_id,
                 @@ring_customers += c.customer_id,
@@ -48,29 +46,47 @@ CREATE OR REPLACE QUERY detect_fraud_ring(STRING card_id, INT max_hops = 2)
                      @@evidence_ids += c.card_id;
 
   # Check for historical confirmed fraud across all ring member cards
-  PriorCases = SELECT cc FROM ConnectedCards:c -(<CLOSED_CASE_FOR_CARD:e)- ClosedCase:cc
+  PriorCases = SELECT cc FROM ConnectedCards:c -(CLOSED_CASE_FOR_CARD:e)-> ClosedCase:cc
                WHERE cc.outcome == "confirmed_fraud"
                ACCUM 
                  @@prior_confirmed_cases += cc.case_id,
                  @@evidence_ids += cc.case_id;
 
   # Normalized Scoring (Policy R6, R9):
-  # Base score from ring size (distinct cards): 1 card = 0.1, 2 cards = 0.4, 3+ cards = 0.7
-  # Boosted by confirmed fraud history in the ring (+0.25)
   INT num_cards = @@ring_cards.size();
   INT num_cases = @@prior_confirmed_cases.size();
   FLOAT conf = 0.0;
   
   IF num_cards >= 3 THEN
-    conf = 0.65 + (IF num_cases > 0 THEN 0.25 ELSE 0.10 END);
+    IF num_cases > 0 THEN
+      conf = 0.65 + 0.25;
+    ELSE
+      conf = 0.65 + 0.10;
+    END;
   ELSE IF num_cards == 2 THEN
-    conf = 0.40 + (IF num_cases > 0 THEN 0.30 ELSE 0.05 END);
+    IF num_cases > 0 THEN
+      conf = 0.40 + 0.30;
+    ELSE
+      conf = 0.40 + 0.05;
+    END;
   ELSE
-    conf = (IF num_cases > 0 THEN 0.35 ELSE 0.10 END);
+    IF num_cases > 0 THEN
+      conf = 0.35;
+    ELSE
+      conf = 0.10;
+    END;
   END;
 
   IF conf > 1.0 THEN conf = 1.0; END;
-  STRING risk = IF conf >= 0.70 THEN "high" ELSE IF conf >= 0.40 THEN "medium" ELSE "low" END;
+  
+  STRING risk = "low";
+  IF conf >= 0.70 THEN
+    risk = "high";
+  ELSE IF conf >= 0.40 THEN
+    risk = "medium";
+  ELSE
+    risk = "low";
+  END;
 
   STRING details_json = "{\"rule_ref\":\"R6,R9\",\"ring_card_count\":" + to_string(num_cards)
                         + ",\"ring_customer_count\":" + to_string(@@ring_customers.size())

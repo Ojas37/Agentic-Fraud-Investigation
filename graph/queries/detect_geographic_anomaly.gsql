@@ -11,8 +11,7 @@ USE GRAPH FraudGraph
 
 DROP QUERY detect_geographic_anomaly
 
-CREATE OR REPLACE QUERY detect_geographic_anomaly(STRING target_txn_id) 
-  RETURNS (STRING pattern_name, FLOAT confidence_score, STRING risk_indicator, STRING details) {
+CREATE OR REPLACE QUERY detect_geographic_anomaly(VERTEX<Transaction> target_txn) {
   
   SetAccum<STRING> @@evidence_ids;
   SumAccum<STRING> @@cust_id = "";
@@ -20,58 +19,67 @@ CREATE OR REPLACE QUERY detect_geographic_anomaly(STRING target_txn_id)
   SumAccum<STRING> @@current_region = "";
   SumAccum<FLOAT> @@model_risk = 0.0;
   SumAccum<STRING> @@channel = "";
-  SumAccum<BOOL> @@is_card_present = false;
+  OrAccum @@is_card_present = false;
   SumAccum<INT> @@concurrent_home_txns = 0;
   
-  Target = {Transaction.*};
-  Target = SELECT t FROM Target:t
-           WHERE t.transaction_id == target_txn_id
-           ACCUM
-             @@evidence_ids += t.transaction_id,
-             @@cust_id += t.customer_id,
-             @@current_region += t.addr1,
-             @@model_risk += t.risk_score,
-             @@channel += t.channel,
-             @@is_card_present += (t.channel == "in_person" OR t.ProductCD == "W");
+  StartTxn = {target_txn};
+  
+  TargetTxn = SELECT t FROM StartTxn:t
+              ACCUM
+                @@evidence_ids += t.transaction_id,
+                @@cust_id += t.customer_id,
+                @@current_region += t.addr1,
+                @@model_risk += t.risk_score,
+                @@channel += t.channel,
+                IF t.channel == "in_person" OR t.ProductCD == "W" THEN
+                  @@is_card_present += true
+                END;
 
-  # Fetch Customer home region
-  Cust = {Customer.*};
-  Cust = SELECT c FROM Cust:c
-         WHERE c.customer_id == @@cust_id
-         ACCUM @@home_region += c.home_region;
+  # Fetch Customer home region via Card -> Customer
+  Cards = SELECT c FROM TargetTxn:t -(MADE_BY:e)-> Card:c;
+  Cust = SELECT cust FROM Cards:c -(OWNED_BY:e)-> Customer:cust
+         ACCUM @@home_region += cust.home_region;
 
-  # Check if card was used in home region within 24h
+  # Check if card was used in home region concurrently
   IF @@is_card_present AND @@current_region != "" AND @@home_region != "" AND @@current_region != @@home_region THEN
-    # Find transactions on customer's cards in home region
-    CustCards = SELECT card FROM Cust:c -(OWNS:e)-> Card:card;
-    HomeTxns = SELECT t FROM CustCards:card -(MADE:e)-> Transaction:t
-               WHERE t.addr1 == @@home_region AND t.transaction_id != target_txn_id
+    CustCards = SELECT c FROM Cust:cust -(OWNS:e)-> Card:c;
+    HomeTxns = SELECT t FROM CustCards:c -(MADE:e)-> Transaction:t
+               WHERE t.addr1 == @@home_region AND t.transaction_id != target_txn.transaction_id
                ACCUM
                  @@evidence_ids += t.transaction_id,
                  @@concurrent_home_txns += 1;
   END;
 
   # Scoring (Policy R2, R3):
-  # Card-present in unexpected region with concurrent home activity = impossible travel (high risk)
-  # Consecutive days in new region without home activity = legitimate trip (low risk / cleared)
   FLOAT conf = 0.0;
   IF @@is_card_present AND @@current_region != "" AND @@home_region != "" AND @@current_region != @@home_region THEN
     IF @@concurrent_home_txns > 0 THEN
-      conf = 0.85 + (@@model_risk * 0.15);  # Dual concurrent locations = clone
+      conf = 0.85 + (@@model_risk * 0.15);
     ELSE
-      conf = 0.40 + (@@model_risk * 0.20);  # Trip vs clone ambiguity
+      conf = 0.40 + (@@model_risk * 0.20);
     END;
   ELSE
-    conf = (@@model_risk * 0.2);
+    conf = (@@model_risk * 0.20);
   END;
 
   IF conf > 1.0 THEN conf = 1.0; END;
-  STRING risk = IF conf >= 0.75 THEN "high" ELSE IF conf >= 0.40 THEN "medium" ELSE "low" END;
+  
+  STRING risk = "low";
+  IF conf >= 0.75 THEN
+    risk = "high";
+  ELSE IF conf >= 0.40 THEN
+    risk = "medium";
+  ELSE
+    risk = "low";
+  END;
+
+  STRING card_present_str = "false";
+  IF @@is_card_present THEN card_present_str = "true"; END;
 
   STRING details_json = "{\"rule_ref\":\"R2-R3\",\"customer_id\":\"" + @@cust_id
                         + "\",\"home_region\":\"" + @@home_region + "\""
                         + ",\"current_region\":\"" + @@current_region + "\""
-                        + ",\"is_card_present\":" + (IF @@is_card_present THEN "true" ELSE "false" END)
+                        + ",\"is_card_present\":" + card_present_str
                         + ",\"concurrent_home_txns\":" + to_string(@@concurrent_home_txns) + "}";
 
   PRINT "out_of_region" AS pattern_name, conf AS confidence_score, risk AS risk_indicator, details_json AS details;

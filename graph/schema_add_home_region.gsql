@@ -1,16 +1,12 @@
 /*
 =============================================================================
-  Schema Modification: Add home_region to Customer Vertex
-  Enables geographic anomaly detection by comparing transaction addr1
-  against the customer's primary historical billing region.
+  Global Schema Modification: Add home_region to Customer Vertex
 =============================================================================
 */
 
-USE GRAPH FraudGraph
-
-CREATE SCHEMA_CHANGE JOB add_home_region_to_customer FOR GRAPH FraudGraph {
+CREATE GLOBAL SCHEMA_CHANGE JOB add_home_region_to_customer {
   ALTER VERTEX Customer ADD ATTRIBUTE (home_region STRING DEFAULT "");
 }
 
-RUN SCHEMA_CHANGE JOB add_home_region_to_customer
+RUN GLOBAL SCHEMA_CHANGE JOB add_home_region_to_customer
 DROP JOB add_home_region_to_customer
