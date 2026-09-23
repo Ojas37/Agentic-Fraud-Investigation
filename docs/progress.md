@@ -11,7 +11,7 @@ _Last updated: Phase 2 Data Ingestion complete_
 | 0 | Project Scaffolding | ✅ Done | Repo structure, .gitignore, .env.example, requirements.txt, base models, CLI stub |
 | 1 | Ingest Real Dataset Info | ✅ Done | README parsed, all 5 files downloaded, answer format + fraud policy + 5 patterns extracted |
 | 2 | Graph Schema & Ingestion | ✅ Done | `FraudGraph` schema deployed live, all 590K txns, 14.8K cards, 13.5K customers, 9.7K devices, 5.5K cases ingested |
-| 3 | Fraud Pattern Detection | ⏳ Pending Phase 2 | GSQL queries for shared device fan-out, burst detection, ring detection, case similarity |
+| 3 | Fraud Pattern Detection | 🟡 In Progress | 6 standardized GSQL detection queries written & tested, queries client implemented |
 | 4 | GraphRAG Layer | ⏳ Pending Phase 3 | `gather_evidence_bundle()`, vector store embedding, policy/pattern doc retrieval |
 | 5 | TigerGraph MCP Integration | ⏳ Pending Phase 4 | Wire Phase 3 queries as MCP tools; smoke test |
 | 6 | Agent Orchestration Core | ⏳ Pending Phase 5 + 🔧 MCP smoke test | LangGraph graph: trigger → case → evidence → assess → decide → explain → memory |

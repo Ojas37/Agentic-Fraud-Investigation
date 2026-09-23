@@ -1,0 +1,83 @@
+/*
+=============================================================================
+  Query: detect_shared_device_fanout (Pattern 3 / Policy Rule R6)
+  Detects card-not-present fraud from a new device / proxy and checks for
+  device sharing across multiple cards.
+=============================================================================
+*/
+
+USE GRAPH FraudGraph
+
+DROP QUERY detect_shared_device_fanout
+
+CREATE OR REPLACE QUERY detect_shared_device_fanout(STRING target_txn_id) 
+  RETURNS (STRING pattern_name, FLOAT confidence_score, STRING risk_indicator, STRING details) {
+  
+  SetAccum<STRING> @@evidence_ids;
+  SetAccum<STRING> @@connected_cards;
+  SetAccum<STRING> @@connected_customers;
+  SumAccum<STRING> @@device_profile_id = "";
+  SumAccum<STRING> @@device_type = "";
+  SumAccum<STRING> @@device_info = "";
+  SumAccum<STRING> @@proxy_flag = "";
+  SumAccum<BOOL> @@is_new_device = false;
+  SumAccum<BOOL> @@proxy_used = false;
+  SumAccum<FLOAT> @@model_risk = 0.0;
+  
+  Target = {Transaction.*};
+  Target = SELECT t FROM Target:t
+           WHERE t.transaction_id == target_txn_id
+           ACCUM
+             @@evidence_ids += t.transaction_id,
+             @@model_risk += t.risk_score;
+
+  # Hop 1: Find DeviceProfile
+  Dev = SELECT d FROM Target:t -(FROM_DEVICE:e)-> DeviceProfile:d
+        ACCUM
+          @@device_profile_id += d.device_profile_id,
+          @@device_type += d.DeviceType,
+          @@device_info += d.DeviceInfo,
+          @@proxy_flag += d.proxy_flag,
+          @@is_new_device += e.device_new,
+          @@proxy_used += e.proxy_used,
+          @@evidence_ids += d.device_profile_id;
+
+  # Hop 2: Find all other transactions on this device
+  OtherTxns = SELECT other_t FROM Dev:d -(DEVICE_USED_IN:e)-> Transaction:other_t
+              WHERE other_t.transaction_id != target_txn_id
+              ACCUM
+                @@evidence_ids += other_t.transaction_id,
+                @@connected_cards += other_t.card_id,
+                @@connected_customers += other_t.customer_id;
+
+  # Scoring (Policy R6):
+  # Base: 0.50 if new device, +0.20 if proxy, +0.20 if shared across >1 card, + (model_risk * 0.2)
+  FLOAT conf = 0.0;
+  IF @@is_new_device THEN
+    conf = 0.50;
+    IF @@proxy_used OR (@@proxy_flag != "" AND @@proxy_flag != "unknown") THEN
+      conf = conf + 0.20;
+    END;
+    IF @@connected_cards.size() >= 2 THEN
+      conf = conf + 0.20;
+    END;
+    conf = conf + (@@model_risk * 0.15);
+  ELSE IF @@connected_cards.size() >= 3 THEN
+    # Existing device used by 3+ cards
+    conf = 0.60 + (@@model_risk * 0.2);
+  ELSE
+    conf = @@model_risk * 0.3;
+  END;
+
+  IF conf > 1.0 THEN conf = 1.0; END;
+  STRING risk = IF conf >= 0.70 THEN "high" ELSE IF conf >= 0.40 THEN "medium" ELSE "low" END;
+
+  STRING details_json = "{\"rule_ref\":\"R6\",\"device_profile_id\":\"" + @@device_profile_id
+                        + "\",\"is_new_device\":" + (IF @@is_new_device THEN "true" ELSE "false" END)
+                        + ",\"proxy_used\":" + (IF @@proxy_used THEN "true" ELSE "false" END)
+                        + ",\"proxy_flag\":\"" + @@proxy_flag + "\""
+                        + ",\"connected_cards_count\":" + to_string(@@connected_cards.size())
+                        + ",\"device_info\":\"" + @@device_info + "\"}";
+
+  PRINT "cnp_new_device" AS pattern_name, conf AS confidence_score, risk AS risk_indicator, details_json AS details;
+}

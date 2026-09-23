@@ -1,0 +1,40 @@
+/*
+=============================================================================
+  Query: compute_customer_home_region
+  Calculates the most frequent BillingRegion (addr1) across each Customer's
+  transactions and updates the Customer.home_region attribute.
+=============================================================================
+*/
+
+USE GRAPH FraudGraph
+
+DROP QUERY compute_customer_home_region
+
+CREATE OR REPLACE QUERY compute_customer_home_region() {
+  MapAccum<STRING, SumAccum<INT>> @region_counts;
+  
+  Cust = {Customer.*};
+  
+  # Step 1: Collect region counts per customer from their transactions
+  Txns = SELECT t FROM Cust:c -(OWNS:e)-> Card:card -(MADE:e2)-> Transaction:t
+         WHERE t.addr1 != ""
+         ACCUM c.@region_counts += (t.addr1 -> 1);
+
+  # Step 2: Determine top region per customer and persist to Customer.home_region
+  Cust = SELECT c FROM Cust:c
+         WHERE c.@region_counts.size() > 0
+         POST-ACCUM
+           STRING top_region = "",
+           INT max_cnt = 0,
+           FOREACH (r, cnt) IN c.@region_counts DO
+             IF cnt > max_cnt THEN
+               max_cnt = cnt,
+               top_region = r
+             END
+           END,
+           c.home_region = top_region;
+
+  PRINT "Customer home regions computed and persisted successfully!" AS status;
+}
+
+INSTALL QUERY compute_customer_home_region

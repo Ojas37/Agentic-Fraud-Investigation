@@ -1,0 +1,91 @@
+/*
+=============================================================================
+  Query: detect_burst_activity (Pattern 2 / Policy Rules R1–R4)
+  Traverses PREV_TXN and NEXT_TXN chain edges within 48h window to detect
+  rapid velocity spikes and card-not-present bursts.
+=============================================================================
+*/
+
+USE GRAPH FraudGraph
+
+DROP QUERY detect_burst_activity
+
+CREATE OR REPLACE QUERY detect_burst_activity(STRING target_txn_id, INT window_hours = 48) 
+  RETURNS (STRING pattern_name, FLOAT confidence_score, STRING risk_indicator, STRING details) {
+  
+  SetAccum<STRING> @@burst_txn_ids;
+  SumAccum<FLOAT> @@total_exposure = 0.0;
+  SumAccum<INT> @@online_count = 0;
+  SumAccum<FLOAT> @@model_risk = 0.0;
+  SumAccum<STRING> @@target_card = "";
+  
+  Target = {Transaction.*};
+  Target = SELECT t FROM Target:t
+           WHERE t.transaction_id == target_txn_id
+           ACCUM 
+             @@burst_txn_ids += t.transaction_id,
+             @@total_exposure += t.TransactionAmt,
+             @@model_risk += t.risk_score,
+             @@target_card += t.card_id,
+             IF t.channel == "online" OR t.ProductCD != "W" THEN
+               @@online_count += 1
+             END;
+
+  # Walk backward along PREV_TXN chain within window_hours
+  INT window_secs = window_hours * 3600;
+  INT accum_gap_back = 0;
+  CurrBack = Target;
+  WHILE CurrBack.size() > 0 AND accum_gap_back <= window_secs DO
+    CurrBack = SELECT prev_t FROM CurrBack:curr -(PREV_TXN:e)-> Transaction:prev_t
+               ACCUM
+                 INT new_gap = accum_gap_back + e.time_gap_seconds,
+                 IF new_gap <= window_secs THEN
+                   @@burst_txn_ids += prev_t.transaction_id,
+                   @@total_exposure += prev_t.TransactionAmt,
+                   IF prev_t.channel == "online" OR prev_t.ProductCD != "W" THEN
+                     @@online_count += 1
+                   END
+                 END;
+  END;
+
+  # Walk forward along NEXT_TXN chain within window_hours
+  INT accum_gap_fwd = 0;
+  CurrFwd = Target;
+  WHILE CurrFwd.size() > 0 AND accum_gap_fwd <= window_secs DO
+    CurrFwd = SELECT next_t FROM CurrFwd:curr -(NEXT_TXN:e)-> Transaction:next_t
+              ACCUM
+                INT new_gap = accum_gap_fwd + e.time_gap_seconds,
+                IF new_gap <= window_secs THEN
+                  @@burst_txn_ids += next_t.transaction_id,
+                  @@total_exposure += next_t.TransactionAmt,
+                  IF next_t.channel == "online" OR next_t.ProductCD != "W" THEN
+                    @@online_count += 1
+                  END
+                END;
+  END;
+
+  # Normalized Scoring (Policy R1–R4: 2–4 online bursts in 48h)
+  # Confidence blends burst velocity, online ratio, exposure, and transaction model risk_score
+  INT burst_size = @@burst_txn_ids.size();
+  FLOAT conf = 0.0;
+  STRING risk = "low";
+  
+  IF burst_size >= 4 AND @@online_count >= 3 THEN
+    conf = 0.65 + (IF @@total_exposure >= 500.0 THEN 0.15 ELSE 0.05 END) + (@@model_risk * 0.2);
+  ELSE IF burst_size >= 2 AND @@online_count >= 2 THEN
+    conf = 0.45 + (IF @@total_exposure >= 300.0 THEN 0.15 ELSE 0.05 END) + (@@model_risk * 0.2);
+  ELSE
+    conf = (@@model_risk * 0.4);
+  END;
+  
+  IF conf > 1.0 THEN conf = 1.0; END;
+  risk = IF conf >= 0.70 THEN "high" ELSE IF conf >= 0.40 THEN "medium" ELSE "low" END;
+
+  STRING details_json = "{\"rule_ref\":\"R1-R4\",\"burst_txn_count\":" + to_string(burst_size)
+                        + ",\"online_txn_count\":" + to_string(@@online_count)
+                        + ",\"total_exposure_usd\":" + to_string(@@total_exposure)
+                        + ",\"window_hours\":" + to_string(window_hours)
+                        + ",\"card_id\":\"" + @@target_card + "\"}";
+
+  PRINT "cnp" AS pattern_name, conf AS confidence_score, risk AS risk_indicator, details_json AS details;
+}
