@@ -1,31 +1,20 @@
-/*
-=============================================================================
-  HHGOA Fraud Investigation Agent — Post-Load Transaction Chain Builder
-  Query: build_txn_chain
-  
-  Iterates over all cards in FraudGraph, orders transactions per card by timestamp,
-  and creates NEXT_TXN (and reverse PREV_TXN) edges between consecutive transactions.
-=============================================================================
-*/
-
 USE GRAPH FraudGraph
 
-CREATE OR REPLACE QUERY build_txn_chain() SYNTAX v2 {
+DROP QUERY build_txn_chain
+
+CREATE OR REPLACE QUERY build_txn_chain() {
   TYPEDEF TUPLE<STRING txn_id, INT dt, DATETIME ts> TXN_INFO;
   
   ListAccum<TXN_INFO> @card_txns;
   
   Cards = {Card.*};
   
-  # Step 1: Collect transactions per card
   Txns = SELECT t FROM Cards:c -(MADE:e)-> Transaction:t
          ACCUM c.@card_txns += TXN_INFO(t.transaction_id, t.TransactionDT, t.ts);
          
-  # Step 2: Sort transactions for each card and insert NEXT_TXN edges
   Cards = SELECT c FROM Cards:c
           WHERE c.@card_txns.size() > 1
           POST-ACCUM
-            # Note: GSQL list sorting
             INT n = c.@card_txns.size(),
             FOREACH i IN RANGE[0, n-2] DO
               STRING from_id = c.@card_txns.get(i).txn_id,
@@ -36,3 +25,5 @@ CREATE OR REPLACE QUERY build_txn_chain() SYNTAX v2 {
             
   PRINT "Transaction chains built successfully!" AS status;
 }
+
+INSTALL QUERY build_txn_chain
