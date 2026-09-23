@@ -13,7 +13,7 @@ _Last updated: Phase 2 Data Ingestion complete_
 | 2 | Graph Schema & Ingestion | ✅ Done | `FraudGraph` schema deployed live, all 590K txns, 14.8K cards, 13.5K customers, 9.7K devices, 5.5K cases ingested |
 | 3 | Fraud Pattern Detection | ✅ Done | 6 standardized GSQL detection queries installed on live graph; queries client & test suite complete |
 | 4 | GraphRAG Layer | ✅ Done | Vector store indexing 5.5K closed cases, policy & regulatory rules, unified `gather_evidence_bundle()` |
-| 5 | TigerGraph MCP Integration | ⏳ Pending Phase 4 | Wire Phase 3 queries as MCP tools; smoke test |
+| 5 | TigerGraph MCP Integration | ✅ Done | Standard MCP server, 7 MCP tool definitions, and LangChain StructuredTool bindings |
 | 6 | Agent Orchestration Core | ⏳ Pending Phase 5 + 🔧 MCP smoke test | LangGraph graph: trigger → case → evidence → assess → decide → explain → memory |
 | 7 | Policy & Permission Engine | ⏳ Pending Phase 6 | YAML rules table; check_policy_permissions node; stubbed action executors |
 | 8 | Case Memory | ⏳ Pending Phase 7 | Write resolved cases to graph; vector-embed summaries; retrieve_similar_cases() |
