@@ -146,6 +146,7 @@ class ActionDecision(BaseModel):
 
 class FraudCase(BaseModel):
     case_id: str = Field(default_factory=lambda: str(uuid4()))
+    graph_case_id: str = ""
     trigger: InvestigationTrigger
     status: CaseStatus = CaseStatus.OPEN
     risk_level: RiskLevel | None = None
@@ -154,7 +155,9 @@ class FraudCase(BaseModel):
     pattern_matches: list[FraudPatternMatch] = Field(default_factory=list)
     actions_before_extra_evidence: list[RecommendedAction] = Field(default_factory=list)
     actions_after_extra_evidence: list[RecommendedAction] = Field(default_factory=list)
+    evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
     explanation: str = ""
+    stop_reason: str = ""
     sar_required: bool = False
     sar_report: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -29,6 +29,7 @@ from agent.models import (
     RiskLevel,
 )
 from agent.policy.engine import PolicyContext, PolicyEngine
+from agent.memory.store import CaseMemory, build_case_memory
 from rag.evidence_gatherer import EvidenceBundle, GraphRAGEvidenceGatherer
 
 
@@ -163,11 +164,13 @@ class InvestigationOrchestrator:
         reasoner: Reasoner,
         evidence_simulator: EvidenceSimulator | None = None,
         policy_engine: PolicyEngine | None = None,
+        case_memory: CaseMemory | None = None,
     ):
         self.evidence_provider = evidence_provider
         self.reasoner = reasoner
         self.evidence_simulator = evidence_simulator or DefaultEvidenceSimulator()
         self.policy_engine = policy_engine or PolicyEngine()
+        self.case_memory = case_memory
         self.graph = self._build_graph()
 
     def invoke(self, trigger: InvestigationTrigger) -> FraudCase:
@@ -406,8 +409,12 @@ class InvestigationOrchestrator:
         case = state.case.model_copy(update={
             "status": status,
             "explanation": self.reasoner.explain(state.case, state.assessment, bundle),
+            "evidence_requests": state.evidence_requests,
+            "stop_reason": stop_reason,
             "updated_at": datetime.utcnow(),
         })
+        if self.case_memory is not None:
+            case = self.case_memory.write_case(case)
         return {"case": case, "stop_reason": stop_reason, "current_node": "explain"}
 
 
@@ -415,11 +422,17 @@ def build_investigation_graph(
     evidence_provider: EvidenceProvider | None = None,
     reasoner: Reasoner | None = None,
     evidence_simulator: EvidenceSimulator | None = None,
+    case_memory: CaseMemory | None = None,
 ) -> InvestigationOrchestrator:
     """Build the production graph, with injectable dependencies for tests."""
     provider = evidence_provider or GraphRAGEvidenceGatherer()
     selected_reasoner = reasoner or LangChainReasoner()
-    return InvestigationOrchestrator(provider, selected_reasoner, evidence_simulator)
+    return InvestigationOrchestrator(
+        provider,
+        selected_reasoner,
+        evidence_simulator,
+        case_memory=case_memory if case_memory is not None else build_case_memory(),
+    )
 
 
 def run_investigation(trigger: InvestigationTrigger) -> FraudCase:

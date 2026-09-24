@@ -169,3 +169,48 @@ class FraudVectorStore:
                 })
 
         return results
+
+    def add_case(self, case: Any) -> None:
+        """Persist a live case summary in the existing searchable index."""
+        content = self._case_text(case)
+        document = {
+            "doc_type": "live_case",
+            "id": case.case_id,
+            "title": f"Live Case {case.case_id}",
+            "content": content,
+            "metadata": {
+                "case_id": case.case_id,
+                "status": case.status.value,
+                "pattern": case.pattern_matches[0].pattern_name if case.pattern_matches else "none",
+                "confidence": case.confidence or 0.0,
+            },
+        }
+        for index, existing in enumerate(self.documents):
+            if existing["doc_type"] == "live_case" and existing["id"] == case.case_id:
+                self.documents[index] = document
+                self.doc_vectors[index] = self.engine.transform([content])[0]
+                self._save_cache()
+                return
+
+        vector = self.engine.transform([content])
+        self.documents.append(document)
+        self.doc_vectors = np.vstack([self.doc_vectors, vector])
+        self._save_cache()
+
+    def _save_cache(self) -> None:
+        with open(self.cache_file, "wb") as f:
+            pickle.dump({
+                "documents": self.documents,
+                "doc_vectors": self.doc_vectors,
+                "engine": self.engine,
+            }, f)
+
+    @staticmethod
+    def _case_text(case: Any) -> str:
+        pattern = " ".join(match.pattern_name for match in case.pattern_matches)
+        evidence = " ".join(item.content for item in case.evidence)
+        return (
+            f"Live case {case.case_id}. Status={case.status.value}. "
+            f"Pattern={pattern or 'none'}. Summary={case.explanation}. "
+            f"Trigger={case.trigger.description}. Evidence={evidence}"
+        )
