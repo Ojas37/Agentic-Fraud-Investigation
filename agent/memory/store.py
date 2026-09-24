@@ -78,7 +78,11 @@ class TigerGraphCaseWriter:
 
     @staticmethod
     def _exposure(case: FraudCase) -> float:
-        amounts = [item.data.get("exposure_usd") for item in case.evidence if item.data.get("exposure_usd") is not None]
+        amounts = [
+            item.metadata.get("exposure_usd")
+            for item in case.evidence
+            if item.metadata.get("exposure_usd") is not None
+        ]
         return float(max(amounts, default=0.0))
 
 

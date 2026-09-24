@@ -235,6 +235,16 @@ class InvestigationOrchestrator:
             context = self.evidence_provider.resolve_transaction_context(target_txn_id)
             card_id = context["card_id"]
             customer_id = customer_id or context["customer_id"]
+            trigger = state.trigger.model_copy(update={
+                "raw_payload": {
+                    **state.trigger.raw_payload,
+                    "flagged_txn_id": target_txn_id,
+                    "card_id": card_id,
+                    "customer_id": customer_id,
+                }
+            })
+        else:
+            trigger = state.trigger
         bundle = self.evidence_provider.gather_evidence_bundle(
             case_id=state.case.case_id,
             card_id=card_id,
@@ -246,6 +256,7 @@ class InvestigationOrchestrator:
 
         evidence = [self._evidence_from_item(item) for item in bundle.items]
         case = state.case.model_copy(update={
+            "trigger": trigger,
             "evidence": evidence,
             "similar_past_cases": [
                 str(item.get("metadata", {}).get("case_id"))
