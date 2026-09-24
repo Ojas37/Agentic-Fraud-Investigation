@@ -37,6 +37,9 @@ class GraphRAGEvidenceGatherer:
         self.graph_client = graph_client or FraudGraphClient()
         self.vector_store = vector_store or FraudVectorStore()
 
+    def resolve_transaction_context(self, transaction_id: str) -> Dict[str, str]:
+        return self.graph_client.resolve_transaction_context(transaction_id)
+
     def gather_evidence_bundle(
         self,
         case_id: str,

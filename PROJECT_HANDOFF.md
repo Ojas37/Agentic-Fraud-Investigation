@@ -6,9 +6,9 @@ _Last audited: 2026-09-24 from the VS Code workspace._
 
 This repository is a partial implementation of the HHGOA TigerGraph agentic fraud-investigation hackathon project. The intended system investigates a transaction or analyst/customer alert using TigerGraph graph queries, GraphRAG evidence, policy controls, an LLM, case memory, and a user interface.
 
-The verified implementation currently stops at a graph-query/RAG/MCP-wrapper layer. The end-to-end agent, policy enforcement, case persistence, UI, benchmark runner, and answer files are absent.
+The verified implementation now includes a runnable Phase 6 LangGraph agent. Policy enforcement, live case persistence, UI, benchmark runner, and answer files remain absent.
 
-Current stack: Python 3.10 runtime observed locally; pyTigerGraph; GSQL; Pydantic; LangChain/LangGraph dependencies declared but no LangGraph workflow implemented; Groq/OpenAI/Anthropic integrations declared or configured but no LLM call path; pandas/numpy/scikit-learn TF-IDF retrieval; a custom MCP-like JSON-RPC wrapper; Streamlit declared but no app.
+Current stack: Python 3.10 runtime; pyTigerGraph; GSQL; Pydantic; LangChain/LangGraph; Groq `openai/gpt-oss-120b`; pandas/numpy/scikit-learn TF-IDF retrieval; a custom MCP-like JSON-RPC wrapper; Streamlit declared but no app.
 
 ## 2. Current Status
 
@@ -16,24 +16,24 @@ Current stack: Python 3.10 runtime observed locally; pyTigerGraph; GSQL; Pydanti
 |---|---|---|---|---|
 | Frontend | NOT IMPLEMENTED | `ui/__init__.py` only | No UI to start | Build analyst dashboard |
 | Backend | NOT IMPLEMENTED | No API service | No | Define service boundary if needed |
-| Agent | NOT IMPLEMENTED | `agent/run.py` parses triggers; `agent/orchestrator.py` absent | CLI blocked by missing `loguru`; no workflow | Implement typed orchestration |
+| Agent | PARTIALLY COMPLETED | `agent/orchestrator.py` provides typed LangGraph workflow and CLI | End-to-end smoke test succeeds; graph memory is not written | Add case persistence and benchmark output |
 | TigerGraph | PARTIALLY COMPLETED | Live graph is reachable from current environment; credentials loaded from `.env` | Read-only access evidenced | Verify schema/counts and secure TLS |
-| GSQL | PARTIALLY COMPLETED | Schema, ingestion scripts, six detection queries | Installed/live results were previously observed; deployment scripts have hard-coded graph name | Fix contracts and document verified deployment |
-| Graph algorithms | PARTIALLY COMPLETED | Pattern queries for card testing, burst, device, geography, ring, similar cases | Direct live results exist, but Python bindings fail for some queries | Correct parameter names and bound fanout |
+| GSQL | PARTIALLY COMPLETED | Schema, ingestion scripts, six detection queries | Direct query smoke test succeeds; deployment scripts have hard-coded graph name | Bound fanout and document verified deployment |
+| Graph algorithms | PARTIALLY COMPLETED | Pattern queries for card testing, burst, device, geography, ring, similar cases | Python vertex bindings now use correct one-tuples; ring traversal remains broad | Bound fanout |
 | TigerGraph MCP | BROKEN/PARTIAL | Custom registry/server and LangChain adapters | In-process tests pass; Windows stdio fails; not official SDK protocol | Implement/clone official server integration and smoke test |
 | GraphRAG | PARTIALLY COMPLETED | `GraphRAGEvidenceGatherer` combines graph calls and local TF-IDF retrieval | Vector retrieval works; graph errors are swallowed | Use real TigerGraph vector store or document the deliberate fallback; fail loudly on graph gaps |
-| LLM | NOT IMPLEMENTED | Prompts and provider settings exist | No invocation | Add structured assess/decide/explain calls |
-| Fraud investigation | NOT IMPLEMENTED | Models describe intended case state | No investigation loop | Implement trigger through stop |
+| LLM | PARTIALLY COMPLETED | `LangChainReasoner` uses Groq structured output for assess/decide/explain | Production smoke test reaches Groq; retry/rate-limit observability remains | Harden retries and token accounting |
+| Fraud investigation | PARTIALLY COMPLETED | LangGraph trigger → case → evidence → assess → decide → request/reassess → explain | Smoke test resolves a case; no graph write or exact answer file | Add persistence and output contract |
 | Evidence gathering | PARTIALLY COMPLETED | Evidence bundle model and gatherer | Policy/case retrieval works; graph portion can be empty on exception | Make evidence provenance and failure state explicit |
-| Risk assessment | NOT IMPLEMENTED | Prompt template only | No result | Implement structured assessment |
+| Risk assessment | PARTIALLY COMPLETED | `RiskAssessment` and reasoner structured output | Live result works; calibration not measured | Evaluate against closed cases |
 | Case management | NOT IMPLEMENTED | `FraudCase` model only | No graph write | Add case lifecycle and output serialization |
 | Case memory | NOT IMPLEMENTED | Historical cases are indexed locally; no live-case write/retrieval | Historical local search works | Write FraudCase and retrieve resolved cases |
-| Next-best-action | NOT IMPLEMENTED | Prompt text contains non-authoritative action examples | No generated or checked actions | Align exact policy identifiers and add rules engine |
-| Policy engine | NOT IMPLEMENTED | Policy prose/codified RAG documents only | No enforcement | Implement action/route validation |
+| Next-best-action | PARTIALLY COMPLETED | `ActionDecision` proposals are validated before case actions are recorded | No benchmark evaluation yet | Align all policy rules and evaluate |
+| Policy engine | PARTIALLY COMPLETED | `agent/policy/engine.py` enforces exact action routes | Full rule table and approval workflow remain | Complete policy conditions |
 | Human approval | NOT IMPLEMENTED | Enum placeholders only | No approval state or gate | Add approval records and execution separation |
 | Dataset | COMPLETED/NOT VERIFIED END-TO-END | Five raw files present; README read; local vector cache present | Files exist | Verify every ingestion mapping and benchmark join |
 | Evaluation | NOT IMPLEMENTED | No runner or answer files | No | Implement exact 20-case output |
-| Testing | PARTIALLY COMPLETED | 3 test modules, 8 tests | `pytest` passed 8 tests with 2 TLS warnings | Add behavior and failure-path tests |
+| Testing | PARTIALLY COMPLETED | 4 test modules, 13 tests | `pytest` passed 13 tests; TLS/LangGraph warnings remain | Add live-write and benchmark tests |
 | Documentation | PARTIALLY COMPLETED | README/schema/progress; three placeholder docs | Existing docs overstate status | Update docs as implementation becomes real |
 | Demo | NOT IMPLEMENTED | No UI or end-to-end run | No | Build a repeatable demo path |
 
@@ -150,11 +150,11 @@ The agent currently accesses TigerGraph indirectly through `graph/queries_client
 
 ## 9. Agent
 
-Implemented: trigger Pydantic model, case/action/evidence model shells, CLI argument parsing, prompt templates in the untracked local file `agent/prompts.py`.
+Implemented: trigger parsing, typed state/models, CLI entrypoint, LangGraph orchestration, Groq structured reasoner, policy route validation, and simulated evidence responses.
 
-Partial: `mcp/client.py` exposes LangChain tools, but no LangGraph graph calls them.
+Partial: `mcp/client.py` exposes LangChain tools, but the orchestration currently calls the GraphRAG provider directly rather than through a network MCP client.
 
-Planned/missing: trigger node, open/update case node, evidence node, assessment node, evidence-request simulation, reassessment loop, action decision, policy/permission check, explanation, case-memory update, output contract, and LLM invocation. No system prompt is currently passed to a model.
+Missing: live case-memory update, exact answer-file output, token/latency accounting, and benchmark evaluation.
 
 ## 10. GraphRAG
 
@@ -168,27 +168,28 @@ Historical memory: local closed-case CSV rows are embedded into the pickle-backe
 
 | Step | Status | Current file/function | Limitation |
 |---|---|---|---|
-| Trigger | PARTIAL | `agent/run.py`, `InvestigationTrigger` | Parser works only after missing logging dependency is installed |
-| Create/open case | NOT IMPLEMENTED | `FraudCase` model only | No persistence or lifecycle |
-| Investigate entities | PARTIAL | graph queries/client | Parameter mismatch and unbounded ring behavior |
+| Trigger | COMPLETED | `agent/run.py`, `InvestigationTrigger` | Direct CLI lookup resolves transaction context from TigerGraph |
+| Create/open case | PARTIAL | `agent/orchestrator.py`, `FraudCase` | In-memory only; no graph persistence |
+| Investigate entities | PARTIAL | graph queries/client | Live query works; ring traversal remains broad |
 | Gather evidence | PARTIAL | `gather_evidence_bundle` | Graph errors swallowed; local rather than TigerGraph vector store |
-| Assess risk | NOT IMPLEMENTED | prompt only | No LLM call or structured result |
-| Assess uncertainty | NOT IMPLEMENTED | no implementation | No sufficiency rule |
-| Request evidence | NOT IMPLEMENTED | enum values only | No simulation or evidence request records |
-| Reassess | NOT IMPLEMENTED | no implementation | No loop |
-| Recommend action | NOT IMPLEMENTED | prompt only | Action names conflict with official policy |
-| Policy/permission check | NOT IMPLEMENTED | no engine | No authoritative route enforcement |
+| Assess risk | PARTIAL | `LangChainReasoner.assess`, `RiskAssessment` | Live result works; no calibration |
+| Assess uncertainty | PARTIAL | `RiskAssessment.needs_more_evidence` | LLM-controlled sufficiency needs policy tests |
+| Request evidence | PARTIAL | `request_more_evidence` node | Responses are simulated, not external |
+| Reassess | COMPLETED | LangGraph conditional loop | No multi-case evaluation |
+| Recommend action | PARTIAL | `LangChainReasoner.decide` | Exact output contract not yet serialized |
+| Policy/permission check | PARTIAL | `agent/policy/engine.py` | Route enforcement exists; full conditions remain |
 | Human approval | NOT IMPLEMENTED | enum only | No approval state |
 | Execute action | NOT IMPLEMENTED | no executors | No mock action log |
-| Explain | NOT IMPLEMENTED | prompt only | No generated narrative |
+| Explain | PARTIAL | `LangChainReasoner.explain` | Live narrative works; no SAR/output serialization |
 | Update memory | NOT IMPLEMENTED | no writer | No live case graph/vector update |
 | Stop | NOT IMPLEMENTED | `max_iterations` field only | No defensible stopping logic |
 
 ## 13. Current Results
 
-- Existing automated tests: **8 passed, 2 warnings** on 2026-09-24.
+- Existing automated tests: **13 passed, 8 warnings** under Python 3.10 on 2026-09-24.
 - Local vector retrieval: tests returned policy and closed-case results; no benchmark accuracy measured.
-- TigerGraph reachability: live read-only calls returned data in prior captured output; no reproducible performance report or complete count audit exists.
+- TigerGraph reachability: live transaction-context lookup and card-testing query succeeded for transaction `3000120`; no complete count audit exists.
+- End-to-end smoke test: CLI reached TigerGraph, local GraphRAG, Groq structured assessment/decision/explanation, and returned `resolved_fraud`; no graph write was claimed.
 - Agent accuracy, precision, recall, F1: **NOT YET MEASURED**.
 - Benchmark results: **NOT RUN**.
 - End-to-end latency/tokens/API performance: **NOT YET MEASURED**.
@@ -206,10 +207,8 @@ Existing tests cover Pydantic parsing, local vector search, bundle construction,
 
 | Issue | Severity | File | Cause | Current behavior | Status |
 |---|---|---|---|---|---|
-| Agent CLI cannot start | Critical | `agent/run.py` | `loguru` absent from current environment | Import fails | Open |
-| Orchestrator absent | Critical | `agent/orchestrator.py` | Phase 6 not implemented | CLI cannot investigate | Open |
-| Query parameter mismatch | Critical | `graph/queries_client.py`, `graph/queries/*.gsql` | Client names differ from GSQL signatures | Live calls can return NULL parameter errors | Open |
-| Graph failures hidden | High | `rag/evidence_gatherer.py` | Broad exception handling | Tests pass without graph evidence | Open |
+| Graph failures hidden | High | `rag/evidence_gatherer.py` | Broad exception handling | Tests can pass without graph evidence | Open |
+| Groq transient rate limits | Medium | Production smoke test | Provider returned 429 once and retried | Run completed after retry | Monitor |
 | Policy identifiers mismatch | Critical | `agent/models.py`, `agent/prompts.py`, `rag/policy_documents.py` | Code uses alternate action names | Cannot produce compliant answer files | Open |
 | MCP stdio fails on Windows | High | `mcp/server.py` | Async pipe setup is incompatible with observed Proactor stdin | Server errors before protocol | Open |
 | Custom MCP is not official MCP | High | `mcp/server.py`, `mcp/client.py` | Hand-rolled JSON-RPC; no initialize/capabilities | Interoperability unverified | Open |

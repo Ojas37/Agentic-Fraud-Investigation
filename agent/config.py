@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # ── LLM ─────────────────────────────────────────────────────────────────
     llm_provider: str = Field("groq", env="LLM_PROVIDER")
     llm_api_key: str = Field(..., env="LLM_API_KEY")
-    llm_model: str = Field("llama-3.3-70b-versatile", env="LLM_MODEL")
+    llm_model: str = Field("openai/gpt-oss-120b", env="LLM_MODEL")
 
     # ── Embeddings ───────────────────────────────────────────────────────────
     embedding_model: str = Field("text-embedding-3-small", env="EMBEDDING_MODEL")

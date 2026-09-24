@@ -52,9 +52,30 @@ def test_query_parameter_names_match_gsql_signatures():
     client.find_similar_cases("C-1")
 
     calls = dict(client.conn.calls)
-    assert calls["detect_card_testing"]["target_txn"] == "T-1"
-    assert calls["detect_burst_activity"]["target_txn"] == "T-1"
-    assert calls["detect_shared_device_fanout"]["target_txn"] == "T-1"
-    assert calls["detect_geographic_anomaly"]["target_txn"] == "T-1"
-    assert calls["detect_fraud_ring"]["target_card"] == "C-1"
-    assert calls["find_similar_cases_graph"]["target_card"] == "C-1"
+    assert calls["detect_card_testing"]["target_txn"] == ("T-1",)
+    assert calls["detect_burst_activity"]["target_txn"] == ("T-1",)
+    assert calls["detect_shared_device_fanout"]["target_txn"] == ("T-1",)
+    assert calls["detect_geographic_anomaly"]["target_txn"] == ("T-1",)
+    assert calls["detect_fraud_ring"]["target_card"] == ("C-1",)
+    assert calls["find_similar_cases_graph"]["target_card"] == ("C-1",)
+
+
+def test_transaction_context_resolution():
+    class FakeFrame:
+        def to_dict(self, orient):
+            assert orient == "records"
+            return [{"transaction_id": "T-1", "card_id": "C-1", "customer_id": "U-1"}]
+
+    class RecordingConnection:
+        def getVertexDataFrameById(self, vertex_type, vertex_id):
+            assert vertex_type == "Transaction"
+            assert vertex_id == "T-1"
+            return FakeFrame()
+
+    client = FraudGraphClient.__new__(FraudGraphClient)
+    client.conn = RecordingConnection()
+    assert client.resolve_transaction_context("T-1") == {
+        "transaction_id": "T-1",
+        "card_id": "C-1",
+        "customer_id": "U-1",
+    }

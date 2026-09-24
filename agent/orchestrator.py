@@ -130,10 +130,10 @@ class LangChainReasoner:
         response = structured.invoke(
             "Propose only actions from the exact HHGOA action catalogue. Do not choose approval "
             "routes; the policy engine will assign them. Keep recommendations proportional.\n"
-            "Allowed actions: ALLOW_TRANSACTION, DECLINE_TRANSACTION, MONITOR_CARD, "
-            "MONITOR_CONNECTED_CARDS, WARN_CUSTOMER, VERIFY_WITH_CUSTOMER, STEP_UP_AUTH, "
-            "BLOCK_CARD, BLOCK_ALL_CARDS, GENERATE_REPORT, CREATE_CASE, FILE_REPORT, "
-            "ESCALATE_TO_ANALYST, CLOSE_NO_FRAUD.\n\n"
+            "Allowed action values: allow_transaction, decline_transaction, monitor_card, "
+            "monitor_connected_cards, warn_customer, verify_with_customer, step_up_auth, "
+            "block_card, block_all_cards, generate_report, create_case, file_report, "
+            "escalate_to_analyst, close_no_fraud. Use these lowercase values exactly.\n\n"
             f"Assessment: {assessment.model_dump_json()}\n"
             f"Evidence: {bundle.synthesis_markdown}\n"
             f"Evidence response: {state.extra_evidence_response or 'none'}"
@@ -224,6 +224,10 @@ class InvestigationOrchestrator:
         card_id = str(payload.get("card_id", ""))
         customer_id = str(payload.get("customer_id", ""))
         target_txn_id = str(payload.get("flagged_txn_id", state.trigger.entity_id))
+        if not card_id and hasattr(self.evidence_provider, "resolve_transaction_context"):
+            context = self.evidence_provider.resolve_transaction_context(target_txn_id)
+            card_id = context["card_id"]
+            customer_id = customer_id or context["customer_id"]
         bundle = self.evidence_provider.gather_evidence_bundle(
             case_id=state.case.case_id,
             card_id=card_id,

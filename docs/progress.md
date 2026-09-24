@@ -1,6 +1,6 @@
 # Progress Tracker — HHGOA Fraud Investigation Agent
 
-_Last updated: Phase 6 Agent Orchestration Core in progress_
+_Last updated: Phase 6 Agent Orchestration Core verified_
 
 ---
 
@@ -14,8 +14,8 @@ _Last updated: Phase 6 Agent Orchestration Core in progress_
 | 3 | Fraud Pattern Detection | ✅ Done | 6 standardized GSQL detection queries installed on live graph; queries client & test suite complete |
 | 4 | GraphRAG Layer | ✅ Done | Vector store indexing 5.5K closed cases, policy & regulatory rules, unified `gather_evidence_bundle()` |
 | 5 | TigerGraph MCP Integration | ✅ Done | Standard MCP server, 7 MCP tool definitions, and LangChain StructuredTool bindings |
-| 6 | Agent Orchestration Core | 🟡 In progress | LangGraph trigger → case → evidence → assess → decide → optional simulated evidence loop → explain; graph memory write remains Phase 8 |
-| 7 | Policy & Permission Engine | ⏳ Pending Phase 6 | YAML rules table; check_policy_permissions node; stubbed action executors |
+| 6 | Agent Orchestration Core | ✅ Done | LangGraph workflow verified end-to-end with live TigerGraph, local GraphRAG, and Groq; graph memory write remains Phase 8 |
+| 7 | Policy & Permission Engine | 🟡 Partial | Exact action enums and deterministic route validator are wired; full rule-condition table and approval workflow remain |
 | 8 | Case Memory | ⏳ Pending Phase 7 | Write resolved cases to graph; vector-embed summaries; retrieve_similar_cases() |
 | 9 | UI / Dashboard | ⏳ Pending Phase 8 | Streamlit: live investigation view, evidence, actions, trigger new case |
 | 10 | Benchmark Run | ⏳ Pending Phase 9 + 🔧 dataset spot-check | run_benchmark.py; 20 case answer files |
@@ -90,3 +90,5 @@ hhgoa-fraud-agent/
 - Assessment, action proposal, and explanation are the only LLM-facing interfaces; policy routes are assigned and validated deterministically.
 - Customer, step-up, and analyst evidence responses are simulated and recorded in state; live case graph writes remain pending Phase 8.
 - Offline orchestration coverage is in `tests/test_orchestrator.py`.
+- Python 3.10 production smoke test succeeded for transaction `3000120`; Groq model is `openai/gpt-oss-120b`.
+- TigerGraph vertex parameters use one-tuples, and CLI transaction triggers resolve card/customer context before ring analysis.
