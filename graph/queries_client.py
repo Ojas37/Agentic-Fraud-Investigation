@@ -72,40 +72,40 @@ class FraudGraphClient:
 
     def detect_card_testing(self, target_txn_id: str, max_micro_txns: int = 10) -> PatternDetectionResult:
         res = self.conn.runInstalledQuery("detect_card_testing", params={
-            "target_txn_id": target_txn_id,
+            "target_txn": target_txn_id,
             "max_micro_txns": max_micro_txns
         })
         return self._parse_query_result(res, "card_testing")
 
     def detect_burst_activity(self, target_txn_id: str, window_hours: int = 48) -> PatternDetectionResult:
         res = self.conn.runInstalledQuery("detect_burst_activity", params={
-            "target_txn_id": target_txn_id,
+            "target_txn": target_txn_id,
             "window_hours": window_hours
         })
         return self._parse_query_result(res, "cnp")
 
     def detect_shared_device_fanout(self, target_txn_id: str) -> PatternDetectionResult:
         res = self.conn.runInstalledQuery("detect_shared_device_fanout", params={
-            "target_txn_id": target_txn_id
+            "target_txn": target_txn_id
         })
         return self._parse_query_result(res, "cnp_new_device")
 
     def detect_geographic_anomaly(self, target_txn_id: str) -> PatternDetectionResult:
         res = self.conn.runInstalledQuery("detect_geographic_anomaly", params={
-            "target_txn_id": target_txn_id
+            "target_txn": target_txn_id
         })
         return self._parse_query_result(res, "out_of_region")
 
     def detect_fraud_ring(self, card_id: str, max_hops: int = 2) -> PatternDetectionResult:
         res = self.conn.runInstalledQuery("detect_fraud_ring", params={
-            "card_id": card_id,
+            "target_card": card_id,
             "max_hops": max_hops
         })
         return self._parse_query_result(res, "fraud_ring")
 
     def find_similar_cases(self, card_id: str, pattern_filter: str = "") -> PatternDetectionResult:
         res = self.conn.runInstalledQuery("find_similar_cases_graph", params={
-            "card_id": card_id,
+            "target_card": card_id,
             "pattern_filter": pattern_filter
         })
         return self._parse_query_result(res, "case_memory_match")

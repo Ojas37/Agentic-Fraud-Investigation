@@ -30,3 +30,31 @@ def test_pattern_result_parsing():
     assert parsed.confidence_score == 0.90
     assert parsed.details["ring_card_count"] == 4
     assert parsed.details["prior_confirmed_fraud_cases"] == 2
+
+
+def test_query_parameter_names_match_gsql_signatures():
+    class RecordingConnection:
+        def __init__(self):
+            self.calls = []
+
+        def runInstalledQuery(self, name, params):
+            self.calls.append((name, params))
+            return []
+
+    client = FraudGraphClient.__new__(FraudGraphClient)
+    client.conn = RecordingConnection()
+
+    client.detect_card_testing("T-1")
+    client.detect_burst_activity("T-1")
+    client.detect_shared_device_fanout("T-1")
+    client.detect_geographic_anomaly("T-1")
+    client.detect_fraud_ring("C-1")
+    client.find_similar_cases("C-1")
+
+    calls = dict(client.conn.calls)
+    assert calls["detect_card_testing"]["target_txn"] == "T-1"
+    assert calls["detect_burst_activity"]["target_txn"] == "T-1"
+    assert calls["detect_shared_device_fanout"]["target_txn"] == "T-1"
+    assert calls["detect_geographic_anomaly"]["target_txn"] == "T-1"
+    assert calls["detect_fraud_ring"]["target_card"] == "C-1"
+    assert calls["find_similar_cases_graph"]["target_card"] == "C-1"

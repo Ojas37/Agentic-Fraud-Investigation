@@ -42,24 +42,25 @@ class CaseStatus(str, Enum):
 
 class ActionType(str, Enum):
     ALLOW_TRANSACTION = "allow_transaction"
-    BLOCK_TRANSACTION = "block_transaction"
-    BLOCK_ACCOUNT = "block_account"
-    MONITOR_ACCOUNT = "monitor_account"
+    DECLINE_TRANSACTION = "decline_transaction"
+    MONITOR_CARD = "monitor_card"
+    MONITOR_CONNECTED_CARDS = "monitor_connected_cards"
     WARN_CUSTOMER = "warn_customer"
-    REQUEST_VALIDATION = "request_validation"
-    REQUEST_STEP_UP_AUTH = "request_step_up_auth"
-    REQUEST_ANALYST_INFO = "request_analyst_info"
+    VERIFY_WITH_CUSTOMER = "verify_with_customer"
+    STEP_UP_AUTH = "step_up_auth"
+    BLOCK_CARD = "block_card"
+    BLOCK_ALL_CARDS = "block_all_cards"
+    GENERATE_REPORT = "generate_report"
     CREATE_CASE = "create_case"
-    FILE_SAR = "file_sar"
+    FILE_REPORT = "file_report"
     ESCALATE_TO_ANALYST = "escalate_to_analyst"
-    CLOSE_CASE = "close_case"
+    CLOSE_NO_FRAUD = "close_no_fraud"
 
 
 class ApprovalRoute(str, Enum):
-    AUTO_EXECUTE = "auto_execute"           # agent executes directly
-    RECOMMEND_ONLY = "recommend_only"       # agent recommends; human decides
-    REQUIRES_HUMAN_APPROVAL = "requires_human_approval"  # must wait for approval
-    REQUIRES_SENIOR_APPROVAL = "requires_senior_approval"
+    AUTO = "auto"
+    L1 = "L1"
+    L2 = "L2"
 
 
 # ─── Core Models ──────────────────────────────────────────────────────────────

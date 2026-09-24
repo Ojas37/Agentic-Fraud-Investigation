@@ -71,4 +71,4 @@ class TigerGraphMCPServer:
 
 if __name__ == "__main__":
     server = TigerGraphMCPServer()
-    print("[MCP Server] TigerGraph MCP Server initialized with tools:", list(server.tools.keys()))
+    asyncio.run(server.run_stdio())
