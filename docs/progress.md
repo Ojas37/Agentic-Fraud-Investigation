@@ -1,6 +1,6 @@
 # Progress Tracker — HHGOA Fraud Investigation Agent
 
-_Last updated: Phase 2 Data Ingestion complete_
+_Last updated: Phase 6 Agent Orchestration Core in progress_
 
 ---
 
@@ -14,7 +14,7 @@ _Last updated: Phase 2 Data Ingestion complete_
 | 3 | Fraud Pattern Detection | ✅ Done | 6 standardized GSQL detection queries installed on live graph; queries client & test suite complete |
 | 4 | GraphRAG Layer | ✅ Done | Vector store indexing 5.5K closed cases, policy & regulatory rules, unified `gather_evidence_bundle()` |
 | 5 | TigerGraph MCP Integration | ✅ Done | Standard MCP server, 7 MCP tool definitions, and LangChain StructuredTool bindings |
-| 6 | Agent Orchestration Core | ⏳ Pending Phase 5 + 🔧 MCP smoke test | LangGraph graph: trigger → case → evidence → assess → decide → explain → memory |
+| 6 | Agent Orchestration Core | 🟡 In progress | LangGraph trigger → case → evidence → assess → decide → optional simulated evidence loop → explain; graph memory write remains Phase 8 |
 | 7 | Policy & Permission Engine | ⏳ Pending Phase 6 | YAML rules table; check_policy_permissions node; stubbed action executors |
 | 8 | Case Memory | ⏳ Pending Phase 7 | Write resolved cases to graph; vector-embed summaries; retrieve_similar_cases() |
 | 9 | UI / Dashboard | ⏳ Pending Phase 8 | Streamlit: live investigation view, evidence, actions, trigger new case |
@@ -83,3 +83,10 @@ hhgoa-fraud-agent/
 | **Centralised `agent/config.py`** | Single source of truth for env vars; all modules import Settings, not os.getenv |
 | **LLM only for assess/decide/explain nodes** | Pattern detection stays graph-driven (GSQL); LLM cannot substitute |
 | **Stubbed action executors** | Real banking integrations out of scope; logged mocks suffice for demo |
+
+## Phase 6 Notes
+
+- `agent/orchestrator.py` now provides the typed LangGraph workflow with injectable evidence and reasoner dependencies.
+- Assessment, action proposal, and explanation are the only LLM-facing interfaces; policy routes are assigned and validated deterministically.
+- Customer, step-up, and analyst evidence responses are simulated and recorded in state; live case graph writes remain pending Phase 8.
+- Offline orchestration coverage is in `tests/test_orchestrator.py`.

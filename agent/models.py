@@ -63,6 +63,18 @@ class ApprovalRoute(str, Enum):
     L2 = "L2"
 
 
+class EvidenceRequestType(str, Enum):
+    CUSTOMER_VALIDATION = "customer_validation"
+    STEP_UP_AUTH = "step_up_auth"
+    ANALYST_INFO = "analyst_info"
+
+
+class InvestigationVerdict(str, Enum):
+    FRAUD = "fraud"
+    LEGITIMATE = "legitimate"
+    UNCERTAIN = "uncertain"
+
+
 # ─── Core Models ──────────────────────────────────────────────────────────────
 
 class InvestigationTrigger(BaseModel):
@@ -101,6 +113,37 @@ class RecommendedAction(BaseModel):
     recorded_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class EvidenceRequest(BaseModel):
+    request_type: EvidenceRequestType
+    asked_after_step: int
+    assumed_response: str
+
+
+class RiskAssessment(BaseModel):
+    verdict: InvestigationVerdict
+    fraud_probability: float = Field(ge=0.0, le=1.0)
+    risk_level: RiskLevel
+    primary_pattern: str = "none"
+    secondary_patterns: list[str] = Field(default_factory=list)
+    top_signals: list[str] = Field(default_factory=list)
+    exposure_usd: float = Field(default=0.0, ge=0.0)
+    needs_more_evidence: bool = False
+    evidence_request_type: EvidenceRequestType | None = None
+    rationale: str = ""
+
+
+class ActionProposal(BaseModel):
+    action_type: ActionType
+    rationale: str
+
+
+class ActionDecision(BaseModel):
+    proposals: list[ActionProposal] = Field(default_factory=list)
+    sar_required: bool = False
+    sar_reason: str = ""
+    stop_reason: str = ""
+
+
 class FraudCase(BaseModel):
     case_id: str = Field(default_factory=lambda: str(uuid4()))
     trigger: InvestigationTrigger
@@ -124,6 +167,11 @@ class AgentState(BaseModel):
     """LangGraph state — passed between all nodes."""
     trigger: InvestigationTrigger
     case: FraudCase | None = None
+    evidence_bundle: dict[str, Any] | None = None
+    assessment: RiskAssessment | None = None
+    action_decision: ActionDecision | None = None
+    evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
+    extra_evidence_response: str = ""
     current_node: str = "trigger"
     iteration_count: int = 0
     max_iterations: int = 10          # circuit-breaker
