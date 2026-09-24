@@ -15,7 +15,7 @@ _Last updated: Phase 6 Agent Orchestration Core verified_
 | 4 | GraphRAG Layer | ✅ Done | Vector store indexing 5.5K closed cases, policy & regulatory rules, unified `gather_evidence_bundle()` |
 | 5 | TigerGraph MCP Integration | ✅ Done | Standard MCP server, 7 MCP tool definitions, and LangChain StructuredTool bindings |
 | 6 | Agent Orchestration Core | ✅ Done | LangGraph workflow verified end-to-end with live TigerGraph, local GraphRAG, and Groq; graph memory write remains Phase 8 |
-| 7 | Policy & Permission Engine | 🟡 Partial | Exact action enums and deterministic route validator are wired; full rule-condition table and approval workflow remain |
+| 7 | Policy & Permission Engine | 🟡 In progress | Deterministic eligibility rules, exact routes, mock auto-execution, and `check_policy_permissions` node are wired; full approval workflow remains |
 | 8 | Case Memory | ⏳ Pending Phase 7 | Write resolved cases to graph; vector-embed summaries; retrieve_similar_cases() |
 | 9 | UI / Dashboard | ⏳ Pending Phase 8 | Streamlit: live investigation view, evidence, actions, trigger new case |
 | 10 | Benchmark Run | ⏳ Pending Phase 9 + 🔧 dataset spot-check | run_benchmark.py; 20 case answer files |
@@ -92,3 +92,4 @@ hhgoa-fraud-agent/
 - Offline orchestration coverage is in `tests/test_orchestrator.py`.
 - Python 3.10 production smoke test succeeded for transaction `3000120`; Groq model is `openai/gpt-oss-120b`.
 - TigerGraph vertex parameters use one-tuples, and CLI transaction triggers resolve card/customer context before ring analysis.
+- Phase 7 policy checks enforce weak-signal blocking, SAR/report triggers, customer-confirmed closure, and `BLOCK_ALL_CARDS` safeguards before actions are recorded.

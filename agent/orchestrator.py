@@ -28,7 +28,7 @@ from agent.models import (
     RiskAssessment,
     RiskLevel,
 )
-from agent.policy.engine import validate_recommendation
+from agent.policy.engine import PolicyContext, PolicyEngine
 from rag.evidence_gatherer import EvidenceBundle, GraphRAGEvidenceGatherer
 
 
@@ -162,10 +162,12 @@ class InvestigationOrchestrator:
         evidence_provider: EvidenceProvider,
         reasoner: Reasoner,
         evidence_simulator: EvidenceSimulator | None = None,
+        policy_engine: PolicyEngine | None = None,
     ):
         self.evidence_provider = evidence_provider
         self.reasoner = reasoner
         self.evidence_simulator = evidence_simulator or DefaultEvidenceSimulator()
+        self.policy_engine = policy_engine or PolicyEngine()
         self.graph = self._build_graph()
 
     def invoke(self, trigger: InvestigationTrigger) -> FraudCase:
@@ -182,6 +184,7 @@ class InvestigationOrchestrator:
         workflow.add_node("gather_evidence", self._gather_evidence)
         workflow.add_node("assess", self._assess)
         workflow.add_node("decide_action", self._decide_action)
+        workflow.add_node("check_policy_permissions", self._check_policy_permissions)
         workflow.add_node("request_more_evidence", self._request_more_evidence)
         workflow.add_node("explain", self._explain)
 
@@ -189,8 +192,9 @@ class InvestigationOrchestrator:
         workflow.add_edge("open_or_update_case", "gather_evidence")
         workflow.add_edge("gather_evidence", "assess")
         workflow.add_edge("assess", "decide_action")
+        workflow.add_edge("decide_action", "check_policy_permissions")
         workflow.add_conditional_edges(
-            "decide_action",
+            "check_policy_permissions",
             self._route_after_decision,
             {
                 "request_more_evidence": "request_more_evidence",
@@ -305,13 +309,33 @@ class InvestigationOrchestrator:
             raise RuntimeError("Cannot decide without case assessment")
         bundle = EvidenceBundle.model_validate(state.evidence_bundle or {})
         decision = self.reasoner.decide(state.assessment, bundle, state)
+        return {"action_decision": decision, "current_node": "decide_action"}
+
+    def _check_policy_permissions(self, value: dict[str, Any]) -> dict[str, Any]:
+        state = self._state(value)
+        if state.case is None or state.assessment is None or state.action_decision is None:
+            raise RuntimeError("Cannot check policy without a case decision")
+
+        response = state.extra_evidence_response.lower()
+        pattern_names = {match.pattern_name for match in state.case.pattern_matches}
+        context = PolicyContext(
+            verdict=state.assessment.verdict,
+            fraud_probability=state.assessment.fraud_probability,
+            exposure_usd=state.assessment.exposure_usd,
+            pattern=state.assessment.primary_pattern,
+            shared_origin=bool(pattern_names & {"fraud_ring", "cnp_new_device", "shared_origin"}),
+            connected_fraud="confirmed fraud" in response,
+            undocumented_pattern=state.assessment.primary_pattern == "undocumented",
+            customer_denied=any(term in response for term in ("unauthorized", "did not", "denied")),
+            customer_confirmed=any(term in response for term in ("authorized", "made the transaction")),
+            evidence_requested=bool(state.evidence_requests),
+            confirmed_card_count=1 + len({match.pattern_name for match in state.case.pattern_matches if match.pattern_name == "fraud_ring"}),
+            credentials_compromised="credentials" in response and "compromised" in response,
+        )
+
         actions = []
-        for proposal in decision.proposals:
-            policy = validate_recommendation(
-                proposal.action_type,
-                self._required_route(proposal.action_type, state.assessment.exposure_usd),
-                state.assessment.exposure_usd,
-            )
+        for proposal in state.action_decision.proposals:
+            policy = self.policy_engine.check(proposal.action_type, context)
             actions.append(RecommendedAction(
                 action_type=proposal.action_type,
                 approval_route=policy.route,
@@ -321,21 +345,17 @@ class InvestigationOrchestrator:
             ))
 
         case_update = {
-            "sar_required": decision.sar_required,
+            "sar_required": state.action_decision.sar_required,
             "updated_at": datetime.utcnow(),
         }
         if state.extra_evidence_requested:
             case_update["actions_after_extra_evidence"] = actions
         else:
             case_update["actions_before_extra_evidence"] = actions
-        case = state.case.model_copy(update=case_update)
-        return {"case": case, "action_decision": decision, "current_node": "decide_action"}
-
-    @staticmethod
-    def _required_route(action: Any, exposure_usd: float) -> ApprovalRoute:
-        from agent.policy.engine import required_route
-
-        return required_route(action, exposure_usd)
+        return {
+            "case": state.case.model_copy(update=case_update),
+            "current_node": "check_policy_permissions",
+        }
 
     @staticmethod
     def _route_after_decision(value: dict[str, Any]) -> str:
