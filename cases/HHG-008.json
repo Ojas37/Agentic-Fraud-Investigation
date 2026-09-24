@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-008",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.84,
+    "pattern": "burst_activity",
+    "pattern_description": "A rapid sequence of low-dollar payments indicates CNP burst activity used to test merchant acceptance before a larger laundering event.",
+    "affected_txn_ids": [
+      "3558054"
+    ],
+    "first_suspicious_txn_id": "3558054",
+    "connected_card_ids": [
+      "C13171-K2"
+    ],
+    "connected_device_profiles": [
+      "rapid_activity_device"
+    ],
+    "exposure_usd": 89.09,
+    "evidence": [
+      "Flagged transaction 3558054 for $55.68 was submitted on online channel with model risk_score 0.38.",
+      "Pattern assessment: burst activity. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C13171 and card C13171-K2 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "A rapid sequence of low-dollar payments indicates CNP burst activity used to test merchant acceptance before a larger laundering event.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-008"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "review_transaction_burst",
+      "monitor_for_follow_on_txns",
+      "request_customer_validation"
+    ],
+    "final": [
+      "block_account_if_burst_continues",
+      "notify_customer",
+      "escalate_for_review"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "High-velocity burst activity indicates testing or laundering behavior but no confirmed ring.",
+    "narrative": "A rapid sequence of low-dollar payments indicates CNP burst activity used to test merchant acceptance before a larger laundering event.",
+    "subjects": [
+      "C13171"
+    ],
+    "total_amount_usd": 122.5,
+    "activity_dates": [
+      "2016-12-20"
+    ]
+  },
+  "stop_reason": "Confirmed burst activity pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.42
+}

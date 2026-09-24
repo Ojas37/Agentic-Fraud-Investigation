@@ -1,0 +1,56 @@
+{
+  "case_id": "HHG-020",
+  "case": {
+    "status": "closed_legitimate",
+    "verdict": "legitimate",
+    "fraud_probability": 0.18,
+    "pattern": "none",
+    "pattern_description": "The flagged transaction is isolated, the customer has no cross-card device linkage, and the risk signal is consistent with a normal low-risk purchase.",
+    "affected_txn_ids": [
+      "3509359"
+    ],
+    "first_suspicious_txn_id": "3509359",
+    "connected_card_ids": [
+      "C12265-K2"
+    ],
+    "connected_device_profiles": [],
+    "exposure_usd": 50.03,
+    "evidence": [
+      "Flagged transaction 3509359 for $125.08 was submitted on online channel with model risk_score 0.52.",
+      "Pattern assessment: none. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C12265 and card C12265-K2 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [],
+    "summary": "The flagged transaction is isolated, the customer has no cross-card device linkage, and the risk signal is consistent with a normal low-risk purchase.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-020"
+  },
+  "evidence_requests": [],
+  "next_best_actions": {
+    "initial": [
+      "continue_monitoring",
+      "review_customer_history"
+    ],
+    "final": [
+      "close_case",
+      "keep_watchlist_status"
+    ],
+    "what_changed": "Customer validation and continued monitoring were sufficient to clear the case."
+  },
+  "sar": {
+    "file": false,
+    "reason": "No fraud pattern was confirmed; transaction does not warrant reporting.",
+    "narrative": "The flagged transaction is isolated, the customer has no cross-card device linkage, and the risk signal is consistent with a normal low-risk purchase.",
+    "subjects": [
+      "C12265"
+    ],
+    "total_amount_usd": 0.0,
+    "activity_dates": [
+      "2016-12-03"
+    ]
+  },
+  "stop_reason": "Customer validation and risk review show no fraud pattern; case was cleared.",
+  "tool_calls": 4,
+  "tokens": 980,
+  "latency_s": 2.6
+}

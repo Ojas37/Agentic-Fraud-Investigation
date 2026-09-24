@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-009",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.87,
+    "pattern": "cnp_new_device",
+    "pattern_description": "The flagged purchase came from a new device fingerprint linked to a mismatched email and billing profile, consistent with account takeover.",
+    "affected_txn_ids": [
+      "3581141"
+    ],
+    "first_suspicious_txn_id": "3581141",
+    "connected_card_ids": [
+      "C08299-K1"
+    ],
+    "connected_device_profiles": [
+      "new_device_profile:unseen_device"
+    ],
+    "exposure_usd": 48.03,
+    "evidence": [
+      "Flagged transaction 3581141 for $30.02 was submitted on online channel with model risk_score 0.28.",
+      "Pattern assessment: cnp new device. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C08299 and card C08299-K1 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The flagged purchase came from a new device fingerprint linked to a mismatched email and billing profile, consistent with account takeover.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-009"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "request_customer_validation",
+      "step_up_auth",
+      "monitor_card"
+    ],
+    "final": [
+      "block_transaction",
+      "notify_customer",
+      "add_device_watch"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "Transaction is a single-device CNP fraud event without confirmed ring coordination.",
+    "narrative": "The flagged purchase came from a new device fingerprint linked to a mismatched email and billing profile, consistent with account takeover.",
+    "subjects": [
+      "C08299"
+    ],
+    "total_amount_usd": 66.04,
+    "activity_dates": [
+      "2016-12-28"
+    ]
+  },
+  "stop_reason": "Confirmed cnp new device pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.59
+}

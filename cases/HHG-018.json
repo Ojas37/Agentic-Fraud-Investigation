@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-018",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.83,
+    "pattern": "out_of_region",
+    "pattern_description": "The flagged purchase was placed in a region that does not match the customer\u2019s home pattern and shows abnormal travel-free movement.",
+    "affected_txn_ids": [
+      "3491361"
+    ],
+    "first_suspicious_txn_id": "3491361",
+    "connected_card_ids": [
+      "C02354-K2"
+    ],
+    "connected_device_profiles": [
+      "geo_anomaly_device:non_home_region"
+    ],
+    "exposure_usd": 62.53,
+    "evidence": [
+      "Flagged transaction 3491361 for $39.08 was submitted on in_person channel with model risk_score 0.48.",
+      "Pattern assessment: out of region. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C02354 and card C02354-K2 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The flagged purchase was placed in a region that does not match the customer\u2019s home pattern and shows abnormal travel-free movement.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-018"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "verify_location_with_customer",
+      "check_recent_travel",
+      "step_up_auth"
+    ],
+    "final": [
+      "block_transaction",
+      "reconcile_home_region",
+      "escalate_if_confirmed"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "Geographic anomaly with mismatched billing and user behavior, requiring customer verification.",
+    "narrative": "The flagged purchase was placed in a region that does not match the customer\u2019s home pattern and shows abnormal travel-free movement.",
+    "subjects": [
+      "C02354"
+    ],
+    "total_amount_usd": 85.98,
+    "activity_dates": [
+      "2016-11-27"
+    ]
+  },
+  "stop_reason": "Confirmed out of region pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.36
+}

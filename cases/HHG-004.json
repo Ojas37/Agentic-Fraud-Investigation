@@ -1,0 +1,71 @@
+{
+  "case_id": "HHG-004",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.95,
+    "pattern": "fraud_ring",
+    "pattern_description": "The transaction is linked to a coordinated device-fanout pattern; transaction velocity and card clustering indicate an organized fraud ring.",
+    "affected_txn_ids": [
+      "3583227"
+    ],
+    "first_suspicious_txn_id": "3583227",
+    "connected_card_ids": [
+      "C08106-K1",
+      "C97081-K2"
+    ],
+    "connected_device_profiles": [
+      "shared_device_profile:online_anchor",
+      "shared_device_profile:proxy_cluster"
+    ],
+    "exposure_usd": 205.33,
+    "evidence": [
+      "Flagged transaction 3583227 for $128.33 was submitted on online channel with model risk_score 0.34.",
+      "Pattern assessment: fraud ring. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C08106 and card C08106-K1 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The transaction is linked to a coordinated device-fanout pattern; transaction velocity and card clustering indicate an organized fraud ring.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-004"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "review_connected_cards",
+      "freeze_card_if_allowed",
+      "escalate_to_analyst"
+    ],
+    "final": [
+      "block_card_and_device",
+      "file_sar",
+      "create_case_record"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": true,
+    "reason": "Organized coordinated fraud ring across multiple cards using a common device cluster.",
+    "narrative": "The transaction is linked to a coordinated device-fanout pattern; transaction velocity and card clustering indicate an organized fraud ring.",
+    "subjects": [
+      "C08106"
+    ],
+    "total_amount_usd": 282.33,
+    "activity_dates": [
+      "2016-12-29"
+    ]
+  },
+  "stop_reason": "Confirmed fraud ring pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 9.02
+}

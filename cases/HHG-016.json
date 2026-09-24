@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-016",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.88,
+    "pattern": "cnp_new_device",
+    "pattern_description": "The disputed transaction originated from a device not seen on the customer\u2019s account, matching a new-device CNP fraud signal.",
+    "affected_txn_ids": [
+      "3534820"
+    ],
+    "first_suspicious_txn_id": "3534820",
+    "connected_card_ids": [
+      "C09988-K1"
+    ],
+    "connected_device_profiles": [
+      "new_device_profile:unseen_device"
+    ],
+    "exposure_usd": 95.47,
+    "evidence": [
+      "Flagged transaction 3534820 for $59.67 was submitted on online channel with model risk_score 0.37.",
+      "Pattern assessment: cnp new device. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C09988 and card C09988-K1 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The disputed transaction originated from a device not seen on the customer\u2019s account, matching a new-device CNP fraud signal.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-016"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "request_customer_validation",
+      "step_up_auth",
+      "monitor_card"
+    ],
+    "final": [
+      "block_transaction",
+      "notify_customer",
+      "add_device_watch"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "Transaction is a single-device CNP fraud event without confirmed ring coordination.",
+    "narrative": "The disputed transaction originated from a device not seen on the customer\u2019s account, matching a new-device CNP fraud signal.",
+    "subjects": [
+      "C09988"
+    ],
+    "total_amount_usd": 131.27,
+    "activity_dates": [
+      "2016-12-12"
+    ]
+  },
+  "stop_reason": "Confirmed cnp new device pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.64
+}

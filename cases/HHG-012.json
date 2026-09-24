@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-012",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.81,
+    "pattern": "out_of_region",
+    "pattern_description": "The flagged transaction used a billing region outside the customer\u2019s normal footprint and is consistent with a travel-free geographic anomaly.",
+    "affected_txn_ids": [
+      "3553342"
+    ],
+    "first_suspicious_txn_id": "3553342",
+    "connected_card_ids": [
+      "C05876-K2"
+    ],
+    "connected_device_profiles": [
+      "geo_anomaly_device:non_home_region"
+    ],
+    "exposure_usd": 49.46,
+    "evidence": [
+      "Flagged transaction 3553342 for $30.91 was submitted on in_person channel with model risk_score 0.55.",
+      "Pattern assessment: out of region. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C05876 and card C05876-K2 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The flagged transaction used a billing region outside the customer\u2019s normal footprint and is consistent with a travel-free geographic anomaly.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-012"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "verify_location_with_customer",
+      "check_recent_travel",
+      "step_up_auth"
+    ],
+    "final": [
+      "block_transaction",
+      "reconcile_home_region",
+      "escalate_if_confirmed"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "Geographic anomaly with mismatched billing and user behavior, requiring customer verification.",
+    "narrative": "The flagged transaction used a billing region outside the customer\u2019s normal footprint and is consistent with a travel-free geographic anomaly.",
+    "subjects": [
+      "C05876"
+    ],
+    "total_amount_usd": 68.0,
+    "activity_dates": [
+      "2016-12-18"
+    ]
+  },
+  "stop_reason": "Confirmed out of region pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.25
+}

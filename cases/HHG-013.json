@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-013",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.86,
+    "pattern": "cnp_new_device",
+    "pattern_description": "The account shows strong evidence of new-device logins and a manually disputed purchase consistent with a takeover or mule account.",
+    "affected_txn_ids": [
+      "3526826"
+    ],
+    "first_suspicious_txn_id": "3526826",
+    "connected_card_ids": [
+      "C07671-K2"
+    ],
+    "connected_device_profiles": [
+      "new_device_profile:unseen_device"
+    ],
+    "exposure_usd": 57.06,
+    "evidence": [
+      "Flagged transaction 3526826 for $35.66 was submitted on online channel with model risk_score 0.76.",
+      "Pattern assessment: cnp new device. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C07671 and card C07671-K2 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The account shows strong evidence of new-device logins and a manually disputed purchase consistent with a takeover or mule account.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-013"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "request_customer_validation",
+      "step_up_auth",
+      "monitor_card"
+    ],
+    "final": [
+      "block_transaction",
+      "notify_customer",
+      "add_device_watch"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "Transaction is a single-device CNP fraud event without confirmed ring coordination.",
+    "narrative": "The account shows strong evidence of new-device logins and a manually disputed purchase consistent with a takeover or mule account.",
+    "subjects": [
+      "C07671"
+    ],
+    "total_amount_usd": 78.45,
+    "activity_dates": [
+      "2016-12-09"
+    ]
+  },
+  "stop_reason": "Confirmed cnp new device pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.53
+}

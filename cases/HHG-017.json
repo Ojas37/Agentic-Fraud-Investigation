@@ -1,0 +1,69 @@
+{
+  "case_id": "HHG-017",
+  "case": {
+    "status": "closed_fraud",
+    "verdict": "fraud",
+    "fraud_probability": 0.78,
+    "pattern": "card_testing",
+    "pattern_description": "The transaction is a small authorization probe followed by additional suspicious CNP behavior, which is classic card testing.",
+    "affected_txn_ids": [
+      "3450629"
+    ],
+    "first_suspicious_txn_id": "3450629",
+    "connected_card_ids": [
+      "C04570-K1"
+    ],
+    "connected_device_profiles": [
+      "low_value_authorization_device"
+    ],
+    "exposure_usd": 160.14,
+    "evidence": [
+      "Flagged transaction 3450629 for $100.09 was submitted on online channel with model risk_score 0.57.",
+      "Pattern assessment: card testing. The anomaly is consistent with the trigger text and observed account behavior.",
+      "Customer C04570 and card C04570-K1 show a transaction history that aligns with the risk profile described in the case review."
+    ],
+    "similar_prior_cases": [
+      "CC-0141",
+      "CC-0778"
+    ],
+    "summary": "The transaction is a small authorization probe followed by additional suspicious CNP behavior, which is classic card testing.",
+    "written_to_graph": true,
+    "graph_case_id": "CASE-017"
+  },
+  "evidence_requests": [
+    {
+      "request_type": "customer_validation",
+      "asked_after_step": 1,
+      "assumed_response": "Customer confirms the transaction was not authorized."
+    }
+  ],
+  "next_best_actions": {
+    "initial": [
+      "verify_small_authorizations",
+      "monitor_for_escalation",
+      "review_recent_activity"
+    ],
+    "final": [
+      "block_card_if_repeat_tests",
+      "warn_customer",
+      "escalate_if_larger_txns_appear"
+    ],
+    "what_changed": "Escalated from initial review to direct blocking or monitoring based on confirmed fraud indicators."
+  },
+  "sar": {
+    "file": false,
+    "reason": "Card testing was confirmed but no multi-card ring or high-dollar laundering pattern was identified.",
+    "narrative": "The transaction is a small authorization probe followed by additional suspicious CNP behavior, which is classic card testing.",
+    "subjects": [
+      "C04570"
+    ],
+    "total_amount_usd": 220.2,
+    "activity_dates": [
+      "2016-11-12"
+    ]
+  },
+  "stop_reason": "Confirmed card testing pattern with a fraud assessment and sufficient evidence to act.",
+  "tool_calls": 7,
+  "tokens": 1497,
+  "latency_s": 8.09
+}
