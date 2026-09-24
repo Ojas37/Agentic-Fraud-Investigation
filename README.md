@@ -1,143 +1,327 @@
-# HHGOA Fraud Investigation Agent
+# Fraud Investigation Agent
 
-> **TigerGraph HHGOA Hackathon Submission**
-> An agentic AI system that investigates financial fraud end-to-end — the way a
-> human analyst would, but automated, graph-grounded, and explainable.
+A graph-grounded fraud investigation system built to analyze suspicious transactions in context, connect related entities, retrieve historical evidence, apply policy logic, and produce an auditable case outcome.
 
----
-
-## Overview
-
-This agent:
-1. **Triggers** on a fraud signal, customer report, or analyst request
-2. **Investigates** via a TigerGraph knowledge graph — traversing transactions,
-   accounts, devices, and prior cases
-3. **Gathers evidence** using GraphRAG (graph findings + policy/pattern document
-   chunks) — synthesised context, not raw data dumps
-4. **Assesses** fraud pattern(s), risk level, and confidence
-5. **Requests more evidence** when uncertain (step-up auth, customer validation,
-   analyst input) — then re-assesses
-6. **Decides next actions** within a policy/permission engine
-7. **Explains** every decision with full evidence chain
-8. **Stores case memory** back to the graph for future investigations
+This project combines TigerGraph, LangGraph, retrieval-augmented generation, and a Streamlit analyst dashboard into a single investigation workflow for financial fraud review.
 
 ---
 
-## Tech Stack
+## What this project does
+
+The system works like a fraud analyst assistant:
+
+1. A transaction or customer alert is received.
+2. The system inspects the graph to find connected cards, customers, devices, and prior activity.
+3. It retrieves similar historical cases and relevant policy/regulatory guidance.
+4. It identifies likely fraud patterns and risk signals.
+5. It recommends the next best action under policy rules.
+6. It writes an auditable case record and stores it as graph memory for future investigations.
+
+The result is not just a score — it is a structured investigation with evidence, rationale, and action paths.
+
+---
+
+## High-level architecture
+
+```mermaid
+flowchart LR
+    A[Trigger: Risk Score / Report / Analyst Request] --> B[Investigation Form]
+    B --> C[TigerGraph Knowledge Graph]
+    C --> D[Graph Pattern Detection]
+    C --> E[Neighbor / Device / Card / Customer Traversal]
+    D --> F[Evidence Aggregation]
+    E --> F
+    F --> G[Historical Case Retrieval]
+    F --> H[Policy + Regulatory Retrieval]
+    G --> I[LangGraph Agent Orchestrator]
+    H --> I
+    I --> J[Risk Assessment + Verdict]
+    J --> K[Next Best Actions]
+    K --> L[Audit Narrative + Graph Case Memory]
+    L --> M[Streamlit Analyst UI]
+```
+
+---
+
+## End-to-end workflow
+
+### 1. Triggered investigation
+The workflow starts from a suspicious transaction or a manual analyst input. The app allows selecting a trigger source, transaction ID, and risk score.
+
+### 2. Graph traversal and pattern detection
+The system queries the TigerGraph graph to find:
+- connected card activity
+- customer behavior patterns
+- device reuse
+- related accounts and cards
+- suspicious clusters and fan-out activity
+- prior graph memory linked to the case
+
+### 3. Historical memory retrieval
+The system searches closed cases and prior investigations to find similar fraud patterns, historical exposure, and repeat behavior.
+
+### 4. Policy and regulatory grounding
+Relevant fraud rules and compliance guidance are retrieved to ensure the recommendation is tied to policy rather than only model output.
+
+### 5. Reasoning and verdict generation
+The agent combines:
+- graph evidence
+- precedent cases
+- policy guidance
+- trigger context
+
+Then it decides on a verdict, confidence, and recommended action set.
+
+### 6. Action routing and audit trail
+The system distinguishes between:
+- auto-executed actions
+- escalated actions requiring analyst approval
+- regulatory filings requiring stronger sign-off
+
+This produces an auditable investigation trail instead of a black-box decision.
+
+---
+
+## Why graph-first fraud investigation matters
+
+Fraud is rarely a single isolated event. It usually appears as a network-of-signals problem:
+
+- the same device used across multiple cards
+- burst activity in a short time window
+- a customer operating outside their usual region
+- repeated patterns seen in previous fraud cases
+- a suspicious transaction connected to broader ring behavior
+
+A table-only approach misses most of this. A graph-based approach makes the relationship explicit and explainable.
+
+---
+
+## Project stack
 
 | Layer | Technology |
-|-------|-----------|
-| Graph DB + Vector Store | TigerGraph Savanna / Community Edition |
-| Graph Query Language | GSQL + TigerGraph built-in algorithms |
-| Agent Framework | LangGraph |
-| LLM | Anthropic Claude (configurable) |
-| GraphRAG | pyTigerGraph vector search + custom retrieval |
-| MCP Exposure | TigerGraph MCP server |
+|---|---|
+| Graph database | TigerGraph |
+| Query layer | GSQL |
+| Agent orchestration | LangGraph |
+| Retrieval layer | GraphRAG + vector search |
+| LLM integration | Configurable provider (Groq/OpenAI/Anthropic-style config pattern) |
 | UI | Streamlit |
-| Language | Python 3.11+ |
+| Data modeling | Python + Pydantic |
+| Workflow output | JSON benchmark files in `cases/` |
 
 ---
 
-## Quick Start
+## Dataset overview
 
-### 1. Prerequisites
-- Python 3.11+
-- A running TigerGraph instance (Savanna or Community Edition)
-- An LLM API key (Anthropic Claude or OpenAI)
-- TigerGraph MCP server cloned: `git clone https://github.com/tigergraph/tigergraph-mcp`
+This project uses a fraud investigation benchmark built around a synthetic but realistic transaction and case dataset.
 
-### 2. Install dependencies
+### Dataset files
+
+- `data/raw/transactions.csv`  
+  Transaction history with card, product, amount, risk, timestamps, and engineered features.
+
+- `data/raw/identity.csv`  
+  Online transaction identity metadata including device, browser, OS, proxy signals, and related profile information.
+
+- `data/raw/closed_cases_history.csv`  
+  Historical investigations used as memory and precedent for fraud pattern recognition.
+
+- `data/raw/case_pack.csv`  
+  The benchmark case pack used to trigger the 20 investigation scenarios.
+
+### What the data represents
+
+The dataset models a card-fraud environment where:
+- transactions are tied to customer and card histories
+- devices and regions can be shared across many cards
+- fraud may involve burst activity, device fanout, impersonation, or coordinated ring behavior
+- some cases are true fraud while others are legitimate activity that looks suspicious
+
+This is intentionally designed to force the system to reason over connected behavior and not just model score alone.
+
+---
+
+## Fraud patterns covered
+
+The repo includes logic and patterns for common fraud scenarios such as:
+
+- card testing
+- card-not-present fraud
+- new-device fraud
+- out-of-region activity
+- account takeover
+- fraud rings
+- similar-case memory match
+
+The dataset also includes a few undocumented or mixed-pattern cases, which is important because real fraud is not always perfectly labeled.
+
+---
+
+## Repository structure
+
+```text
+hhgoa-fraud-agent/
+├── agent/
+│   ├── config.py
+│   ├── memory/
+│   ├── models.py
+│   ├── policy/
+│   ├── prompts.py
+│   ├── run.py
+│   └── tools/
+├── cases/
+│   ├── HHG-001.json
+│   ├── HHG-002.json
+│   └── ...
+├── data/
+│   ├── raw/
+│   └── processed/
+├── docs/
+│   ├── algorithms.md
+│   ├── blog-post.md
+│   ├── mcp-setup.md
+│   ├── progress.md
+│   ├── schema.md
+│   └── ...
+├── graph/
+│   ├── build_txn_chain.gsql
+│   ├── compute_customer_home_region.gsql
+│   ├── compute_home_regions.py
+│   ├── deploy_schema.py
+│   ├── ingest_data.py
+│   ├── install_queries.py
+│   ├── queries/
+│   ├── queries_client.py
+│   └── schema.gsql
+├── mcp/
+│   ├── client.py
+│   ├── server.py
+│   └── tools.py
+├── rag/
+│   ├── evidence_gatherer.py
+│   ├── policy_documents.py
+│   ├── vector_store.py
+│   └── __init__.py
+├── tests/
+│   ├── test_evidence_gatherer.py
+│   ├── test_graph_queries.py
+│   ├── test_mcp_integration.py
+│   └── ...
+├── ui/
+│   └── app.py
+├── requirements.txt
+├── README.md
+└── .env.example
+```
+
+---
+
+## Key project modules
+
+### `agent/`
+Core workflow orchestration and investigation logic.
+
+### `graph/`
+TigerGraph schema, data loading jobs, and graph query implementations.
+
+### `rag/`
+Retrieval and semantic recall for prior cases, documents, and policy text.
+
+### `mcp/`
+TigerGraph MCP wrappers for model tool access.
+
+### `ui/`
+Streamlit analyst dashboard used to trigger investigations and view outputs.
+
+### `cases/`
+Generated benchmark answer files in the expected output format.
+
+---
+
+## How to run the app
+
+### 1. Install dependencies
+
 ```bash
 python -m venv .venv
-# Windows:
 .venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
-
 pip install -r requirements.txt
 ```
 
-### 3. Configure environment
+### 2. Configure environment
+Create a `.env` file with your TigerGraph and LLM configuration values.
+
+### 3. Launch the Streamlit dashboard
+
 ```bash
-cp .env.example .env
-# Edit .env with your TigerGraph and LLM credentials
+python -m streamlit run ui/app.py --server.headless true --server.port 8501
 ```
 
-### 4. Load data (after completing Phase 2 setup)
+Then open:
+- http://localhost:8501
+
+### 4. Run tests
+
 ```bash
-# See docs/schema.md for GSQL schema and loading job instructions
+python -m pytest -q
 ```
 
-### 5. Start MCP server (after Phase 5 setup)
-```bash
-# See docs/mcp-setup.md
-```
+### 5. Generate benchmark outputs
 
-### 6. Run an investigation
-```bash
-# From a trigger file:
-python -m agent.run --trigger-file path/to/trigger.json
-
-# From CLI args:
-python -m agent.run --transaction-id TXN123456 --source risk_score --risk-score 0.87
-```
-
-### 7. Launch the UI
-```bash
-streamlit run ui/app.py
-```
-
-### 8. Run all 20 benchmark cases
 ```bash
 python tests/run_benchmark.py
-# Output → cases/  (one JSON file per case)
 ```
 
 ---
 
-## Repository Structure
+## Example investigation flow
 
-```
-hhgoa-fraud-agent/
-├── data/           # raw + processed dataset (gitignored)
-├── graph/          # GSQL schema, loading jobs, algorithms
-├── mcp/            # TigerGraph MCP server config + tool wrappers
-├── rag/            # GraphRAG retrieval + document embedding
-├── agent/
-│   ├── config.py   # Centralised settings (loads .env)
-│   ├── models.py   # Pydantic data models shared across all nodes
-│   ├── run.py      # CLI entrypoint
-│   ├── orchestrator.py   # LangGraph graph definition (Phase 6)
-│   ├── tools/      # Individual tool implementations
-│   ├── memory/     # Case memory read/write
-│   └── policy/     # Policy & permission engine
-├── cases/          # Generated case output files (benchmark)
-├── ui/             # Streamlit analyst dashboard
-├── tests/          # Unit + integration tests; run_benchmark.py
-├── docs/           # Schema, algorithm, MCP setup, blog post, progress
-├── .env.example    # Environment variable template
-├── requirements.txt
-└── README.md
-```
+A sample human workflow is:
+
+- risk model flags suspicious transaction
+- analyst opens case in the app
+- graph extracts connected customers/cards/devices
+- similar historical cases are retrieved
+- policy rules are applied
+- risk is reassessed with evidence
+- recommended actions are produced
+- case is stored for future reuse
+
+This is the operational loop the project is designed to automate.
 
 ---
 
-## Documentation
+## Result
 
-- [`docs/progress.md`](docs/progress.md) — Phase-by-phase build status
-- [`docs/schema.md`](docs/schema.md) — TigerGraph graph schema _(Phase 2)_
-- [`docs/algorithms.md`](docs/algorithms.md) — Fraud detection GSQL queries _(Phase 3)_
-- [`docs/mcp-setup.md`](docs/mcp-setup.md) — MCP server setup _(Phase 5)_
-- [`docs/blog-post.md`](docs/blog-post.md) — Technical blog post _(Phase 11)_
+The project produces structured outputs including:
+- verdict
+- risk level
+- fraud probability
+- pattern summary
+- evidence chain
+- policy references
+- next best actions
+- SAR narrative when required
+- graph memory for continuous learning
+
+This makes the system practical for both demonstration and real operational review.
 
 ---
 
 ## Status
 
-> 🚧 **Active development** — Phase 0 complete. See [`docs/progress.md`](docs/progress.md) for current status.
+The repository contains the full project structure, investigation workflow, benchmark output generation, and analyst-facing UI. It is intended as a complete TigerGraph + agentic fraud investigation prototype.
 
 ---
 
-## Team
+## Project intent
 
-Built for the TigerGraph HHGOA Hackathon.
+This project demonstrates how modern AI systems can work with graph databases to support real-world fraud operations:
+
+- faster investigation
+- better evidence linkage
+- explainable decisions
+- policy-aware actions
+- auditable case memory
+
+It is designed to show that fraud detection is not only a score problem — it is a connected investigation problem.
