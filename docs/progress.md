@@ -1,6 +1,6 @@
 # Progress Tracker — HHGOA Fraud Investigation Agent
 
-_Last updated: Phase 6 Agent Orchestration Core verified_
+_Last updated: Phase 9 UI / Dashboard verified_
 
 ---
 
@@ -17,7 +17,7 @@ _Last updated: Phase 6 Agent Orchestration Core verified_
 | 6 | Agent Orchestration Core | ✅ Done | LangGraph workflow verified end-to-end with live TigerGraph, local GraphRAG, and Groq; graph memory write remains Phase 8 |
 | 7 | Policy & Permission Engine | 🟡 In progress | Deterministic eligibility rules, exact routes, mock auto-execution, and `check_policy_permissions` node are wired; full approval workflow remains |
 | 8 | Case Memory | 🟡 In progress | `CaseMemory` writes FraudCase vertices/edges and indexes live summaries; live write verification remains pending |
-| 9 | UI / Dashboard | ⏳ Pending Phase 8 | Streamlit: live investigation view, evidence, actions, trigger new case |
+| 9 | UI / Dashboard | ✅ Done | Streamlit analyst console with trigger form, live investigation status, evidence, actions, approvals, explanation, and graph-memory state |
 | 10 | Benchmark Run | ⏳ Pending Phase 9 + 🔧 dataset spot-check | run_benchmark.py; 20 case answer files |
 | 11 | Docs & Submission Prep | ⏳ Pending Phase 10 | blog-post.md draft, final README |
 
@@ -94,3 +94,4 @@ hhgoa-fraud-agent/
 - TigerGraph vertex parameters use one-tuples, and CLI transaction triggers resolve card/customer context before ring analysis.
 - Phase 7 policy checks enforce weak-signal blocking, SAR/report triggers, customer-confirmed closure, and `BLOCK_ALL_CARDS` safeguards before actions are recorded.
 - Phase 8 adds `agent/memory/store.py`: graph case writer, live-case vector indexing, and similar-case retrieval. Production execution now writes completed cases to TigerGraph; run a deliberate live smoke test before benchmark use.
+- Phase 9 adds `ui/app.py`; verified with Streamlit health check at `http://localhost:8501` returning `200 ok`.
