@@ -29,7 +29,7 @@ from agent.models import (
     RiskLevel,
 )
 from agent.policy.engine import PolicyContext, PolicyEngine
-from agent.memory.store import CaseMemory, build_case_memory
+from agent.memory.store import CaseMemory, TigerGraphCaseWriter
 from rag.evidence_gatherer import EvidenceBundle, GraphRAGEvidenceGatherer
 
 
@@ -86,7 +86,7 @@ class DefaultEvidenceSimulator:
 
 
 class LangChainReasoner:
-    """LLM adapter used only by assess, decide, and explain nodes."""
+    """LLM adapter used by the assessment and action-decision nodes."""
 
     def __init__(self, model: Any | None = None):
         self.model = model or self._build_model()
@@ -419,7 +419,7 @@ class InvestigationOrchestrator:
         )
         case = state.case.model_copy(update={
             "status": status,
-            "explanation": self.reasoner.explain(state.case, state.assessment, bundle),
+            "explanation": self._build_explanation(state.case, state.assessment),
             "evidence_requests": state.evidence_requests,
             "stop_reason": stop_reason,
             "updated_at": datetime.utcnow(),
@@ -427,6 +427,16 @@ class InvestigationOrchestrator:
         if self.case_memory is not None:
             case = self.case_memory.write_case(case)
         return {"case": case, "stop_reason": stop_reason, "current_node": "explain"}
+
+    @staticmethod
+    def _build_explanation(case: FraudCase, assessment: RiskAssessment) -> str:
+        """Build the audit explanation deterministically after the LLM decisions."""
+        patterns = ", ".join(match.pattern_name for match in case.pattern_matches) or "no confirmed pattern"
+        return (
+            f"Assessment: {assessment.verdict.value} with fraud probability "
+            f"{assessment.fraud_probability:.2f}. Primary signals: {patterns}. "
+            f"Rationale: {assessment.rationale}"
+        )
 
 
 def build_investigation_graph(
@@ -438,11 +448,16 @@ def build_investigation_graph(
     """Build the production graph, with injectable dependencies for tests."""
     provider = evidence_provider or GraphRAGEvidenceGatherer()
     selected_reasoner = reasoner or LangChainReasoner()
+    selected_memory = case_memory
+    if selected_memory is None:
+        graph_client = getattr(provider, "graph_client", None)
+        writer = TigerGraphCaseWriter(graph_client=graph_client) if graph_client is not None else None
+        selected_memory = CaseMemory(graph_writer=writer)
     return InvestigationOrchestrator(
         provider,
         selected_reasoner,
         evidence_simulator,
-        case_memory=case_memory if case_memory is not None else build_case_memory(),
+        case_memory=selected_memory,
     )
 
 

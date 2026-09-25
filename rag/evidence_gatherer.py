@@ -58,9 +58,14 @@ class GraphRAGEvidenceGatherer:
             trigger_text=trigger_text
         )
 
-        # ─── 1. Run All 6 GSQL Graph Detection Queries ──────────────────────
+        # ─── 1. Run only the graph patterns relevant to this trigger ─────────
         try:
-            patterns = self.graph_client.run_all_detection_patterns(target_txn_id, card_id)
+            patterns = self._run_relevant_patterns(
+                target_txn_id=target_txn_id,
+                card_id=card_id,
+                trigger_text=trigger_text,
+                risk_score=risk_score,
+            )
             bundle.graph_patterns = patterns
             
             for pname, p_res in patterns.items():
@@ -83,7 +88,7 @@ class GraphRAGEvidenceGatherer:
                 query_terms.append(f"Pattern {top_pattern.pattern_name}")
 
         search_query = " ".join(query_terms)
-        similar_cases = self.vector_store.search(search_query, top_k=3, doc_type="closed_case")
+        similar_cases = self.vector_store.search(search_query, top_k=2, doc_type="closed_case")
         bundle.case_precedents = similar_cases
 
         for c in similar_cases:
@@ -96,7 +101,7 @@ class GraphRAGEvidenceGatherer:
             ))
 
         # ─── 3. Retrieve Applicable Policy Rules & Regulatory Guidance ─────
-        policy_matches = self.vector_store.search(search_query, top_k=2, doc_type="policy_rule")
+        policy_matches = self.vector_store.search(search_query, top_k=1, doc_type="policy_rule")
         bundle.applicable_policies = policy_matches
         for p in policy_matches:
             bundle.items.append(EvidenceItem(
@@ -122,6 +127,34 @@ class GraphRAGEvidenceGatherer:
         bundle.synthesis_markdown = self._format_synthesis_markdown(bundle)
         return bundle
 
+    def _run_relevant_patterns(
+        self,
+        target_txn_id: str,
+        card_id: str,
+        trigger_text: str,
+        risk_score: Optional[float],
+    ) -> Dict[str, PatternDetectionResult]:
+        """Select a small, high-signal query set for the trigger type."""
+        trigger = trigger_text.lower()
+        selected: Dict[str, PatternDetectionResult] = {}
+
+        if "customer" in trigger or "never made" in trigger or "unauthorized" in trigger:
+            selected["shared_device"] = self.graph_client.detect_shared_device_fanout(target_txn_id)
+            selected["geographic_anomaly"] = self.graph_client.detect_geographic_anomaly(target_txn_id)
+        elif "analyst" in trigger or "same unusual device" in trigger:
+            selected["shared_device"] = self.graph_client.detect_shared_device_fanout(target_txn_id)
+            selected["fraud_ring"] = self.graph_client.detect_fraud_ring(card_id)
+        else:
+            selected["card_testing"] = self.graph_client.detect_card_testing(target_txn_id)
+            selected["burst_activity"] = self.graph_client.detect_burst_activity(target_txn_id)
+
+        if risk_score is None or risk_score >= 0.70:
+            selected["fraud_ring"] = self.graph_client.detect_fraud_ring(card_id)
+        else:
+            selected["similar_cases"] = self.graph_client.find_similar_cases(card_id)
+
+        return selected
+
     def _format_synthesis_markdown(self, bundle: EvidenceBundle) -> str:
         md = [
             f"### Evidence Synthesis for Case `{bundle.case_id}`",
@@ -132,19 +165,19 @@ class GraphRAGEvidenceGatherer:
 
         if bundle.graph_patterns:
             for pname, pres in bundle.graph_patterns.items():
-                md.append(f"- **{pres.pattern_name}** | Confidence: `{pres.confidence_score:.2f}` | Risk: `{pres.risk_indicator.upper()}` | Details: {pres.details}")
+                md.append(f"- **{pres.pattern_name}** | Confidence: `{pres.confidence_score:.2f}` | Risk: `{pres.risk_indicator.upper()}` | Details: {str(pres.details)[:300]}")
         else:
             md.append("- No active graph signals triggered.")
 
         md.append("\n#### 2. Top Historical Case Precedents (Vector RAG):")
         for c in bundle.case_precedents:
             meta = c.get("metadata", {})
-            md.append(f"- **Case {meta.get('case_id')}** ({meta.get('outcome')}, pattern: `{meta.get('pattern')}`): {meta.get('analyst_notes', '')[:200]}...")
+            md.append(f"- **Case {meta.get('case_id')}** ({meta.get('outcome')}, pattern: `{meta.get('pattern')}`): {meta.get('analyst_notes', '')[:160]}...")
 
         md.append("\n#### 3. Governing Policy Rules & Regulatory Citations:")
         for p in bundle.applicable_policies:
-            md.append(f"- **{p['title']}:** {p['content']}")
+            md.append(f"- **{p['title']}:** {p['content'][:500]}")
         for r in bundle.regulatory_citations:
-            md.append(f"- **{r['title']}:** {r['content']}")
+            md.append(f"- **{r['title']}:** {r['content'][:350]}")
 
         return "\n".join(md)
