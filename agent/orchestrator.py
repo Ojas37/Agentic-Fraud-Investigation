@@ -7,9 +7,11 @@ explanation. Policy validation remains deterministic and authoritative.
 from __future__ import annotations
 
 from datetime import datetime
+from time import perf_counter
 from typing import Any, Callable, Protocol
 
 from langgraph.graph import END, StateGraph
+from langchain_core.callbacks import UsageMetadataCallbackHandler
 
 from agent.models import (
     ActionDecision,
@@ -90,6 +92,16 @@ class LangChainReasoner:
 
     def __init__(self, model: Any | None = None):
         self.model = model or self._build_model()
+        self.input_tokens = 0
+        self.output_tokens = 0
+
+    def _invoke(self, runnable: Any, prompt: str) -> Any:
+        usage_handler = UsageMetadataCallbackHandler()
+        response = runnable.invoke(prompt, config={"callbacks": [usage_handler]})
+        for usage in usage_handler.usage_metadata.values():
+            self.input_tokens += int(usage.get("input_tokens", 0))
+            self.output_tokens += int(usage.get("output_tokens", 0))
+        return response
 
     @staticmethod
     def _build_model() -> Any:
@@ -113,7 +125,7 @@ class LangChainReasoner:
 
     def assess(self, bundle: EvidenceBundle, state: AgentState) -> RiskAssessment:
         structured = self.model.with_structured_output(RiskAssessment)
-        response = structured.invoke(
+        response = self._invoke(structured,
             "Assess fraud risk using only this synthesized evidence. Do not invent graph facts. "
             "A risk score is not a verdict. Decide whether more evidence is needed.\n\n"
             f"{bundle.synthesis_markdown}\n\n"
@@ -128,7 +140,7 @@ class LangChainReasoner:
         state: AgentState,
     ) -> ActionDecision:
         structured = self.model.with_structured_output(ActionDecision)
-        response = structured.invoke(
+        response = self._invoke(structured,
             "Propose only actions from the exact HHGOA action catalogue. Do not choose approval "
             "routes; the policy engine will assign them. Keep recommendations proportional.\n"
             "Allowed action values: allow_transaction, decline_transaction, monitor_card, "
@@ -147,7 +159,7 @@ class LangChainReasoner:
         assessment: RiskAssessment,
         bundle: EvidenceBundle,
     ) -> str:
-        response = self.model.invoke(
+        response = self._invoke(self.model,
             "Write a concise audit narrative explaining the trigger, graph/document evidence, "
             "uncertainty, policy rules, actions, and stopping reason. Do not add facts.\n\n"
             f"Assessment: {assessment.model_dump_json()}\n"
@@ -174,12 +186,18 @@ class InvestigationOrchestrator:
         self.graph = self._build_graph()
 
     def invoke(self, trigger: InvestigationTrigger) -> FraudCase:
+        started = perf_counter()
         initial = AgentState(trigger=trigger)
         result = self.graph.invoke(initial.model_dump())
         final_state = AgentState.model_validate(result)
         if final_state.case is None:
             raise RuntimeError("Investigation ended without a case")
-        return final_state.case
+        metrics = {
+            "latency_s": round(perf_counter() - started, 3),
+            "tokens": int(getattr(self.reasoner, "input_tokens", 0))
+            + int(getattr(self.reasoner, "output_tokens", 0)),
+        }
+        return final_state.case.model_copy(update=metrics)
 
     def _build_graph(self):
         workflow = StateGraph(AgentState)
@@ -258,6 +276,7 @@ class InvestigationOrchestrator:
         case = state.case.model_copy(update={
             "trigger": trigger,
             "evidence": evidence,
+            "tool_calls": state.case.tool_calls + len(bundle.graph_patterns) + 3,
             "similar_past_cases": [
                 str(item.get("metadata", {}).get("case_id"))
                 for item in bundle.case_precedents

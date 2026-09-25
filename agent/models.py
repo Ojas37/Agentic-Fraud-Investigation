@@ -164,6 +164,9 @@ class FraudCase(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     written_to_graph: bool = False
     similar_past_cases: list[str] = Field(default_factory=list)  # case_ids
+    tool_calls: int = 0
+    tokens: int = 0
+    latency_s: float = 0.0
 
 
 class AgentState(BaseModel):
